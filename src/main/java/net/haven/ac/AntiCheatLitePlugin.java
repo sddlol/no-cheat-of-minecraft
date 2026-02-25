@@ -17,6 +17,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class AntiCheatLitePlugin extends JavaPlugin {
 
     private ViolationManager violationManager;
+    private boolean chatDebugEnabled;
+    private DeathMessageListener deathMessageListener;
     private MovementListener movementListener;
     private CombatListener combatListener;
     private ClickListener clickListener;
@@ -46,6 +48,7 @@ public final class AntiCheatLitePlugin extends JavaPlugin {
         reloadConfig();
         FileConfiguration cfg = getConfig();
 
+        chatDebugEnabled = cfg.getBoolean(\"debug_chat_default\", true);
         if (violationManager != null) {
             violationManager.shutdown();
         }
@@ -74,6 +77,12 @@ public final class AntiCheatLitePlugin extends JavaPlugin {
         }
         scaffoldListener = new ScaffoldListener(this, violationManager, cfg);
         Bukkit.getPluginManager().registerEvents(scaffoldListener, this);
+if (deathMessageListener != null) {
+    org.bukkit.event.HandlerList.unregisterAll(deathMessageListener);
+}
+deathMessageListener = new DeathMessageListener(this);
+Bukkit.getPluginManager().registerEvents(deathMessageListener, this);
+
 
         if (noFallListener != null) {
             org.bukkit.event.HandlerList.unregisterAll(noFallListener);
@@ -144,4 +153,12 @@ public final class AntiCheatLitePlugin extends JavaPlugin {
     public static String color(String s) {
         return ChatColor.translateAlternateColorCodes('&', s);
     }
+}
+
+public boolean isChatDebugEnabled() {
+    return chatDebugEnabled;
+}
+
+public void setChatDebugEnabled(boolean enabled) {
+    this.chatDebugEnabled = enabled;
 }

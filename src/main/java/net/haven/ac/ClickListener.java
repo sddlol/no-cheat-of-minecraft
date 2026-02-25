@@ -164,7 +164,7 @@ public final class ClickListener implements Listener {
     }
 
     private void alert(Player suspected, String check, double checkVl, String details) {
-        if (!alertsEnabled) return;
+        if (!alertsEnabled || !plugin.isChatDebugEnabled()) return;
         String msg = alertFormat
                 .replace("{player}", suspected.getName())
                 .replace("{check}", check)

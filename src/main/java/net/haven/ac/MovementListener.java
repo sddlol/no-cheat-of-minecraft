@@ -69,7 +69,15 @@ public final class MovementListener implements Listener {
     private final double simSpecialEnvLooseMult;
     private final double simBaseSlackBps;
 
-    private final boolean flyEnabled;
+    // Blink (sudden move)
+private final boolean blinkEnabled;
+private final double blinkMaxDistance;
+private final double blinkPunishDamage;
+private final double blinkVlAdd;
+private final long blinkIgnoreAfterVelocityMs;
+
+private final boolean flyEnabled;
+
     private final int flyMinAirTicks;
     private final double flyMaxAbsYDelta;
     private final double flyVlAdd;
@@ -127,7 +135,14 @@ public final class MovementListener implements Listener {
         this.simSpecialEnvLooseMult = cfg.getDouble("checks.movement_sim.special_env_loose_mult", 1.35);
         this.simBaseSlackBps = cfg.getDouble("checks.movement_sim.base_slack_bps", 0.75);
 
-        this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
+        this.blinkEnabled = cfg.getBoolean("checks.blink.enabled", true);
+this.blinkMaxDistance = cfg.getDouble("checks.blink.max_teleport_distance", 20.0);
+this.blinkPunishDamage = cfg.getDouble("checks.blink.punish_damage", 2.0);
+this.blinkVlAdd = cfg.getDouble("checks.blink.vl_add", 2.0);
+this.blinkIgnoreAfterVelocityMs = cfg.getLong("checks.blink.ignore_after_velocity_ms", 1200L);
+
+this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
+
         this.flyMinAirTicks = cfg.getInt("checks.fly.min_air_ticks", 14);
         this.flyMaxAbsYDelta = cfg.getDouble("checks.fly.max_abs_y_delta_per_tick", 0.02);
         this.flyVlAdd = cfg.getDouble("checks.fly.vl_add", 1.5);
@@ -200,6 +215,32 @@ public final class MovementListener implements Listener {
         }
 
         long dtMs = Math.max(1L, now - st.lastMoveAt);
+
+
+        // BLINK: sudden large move (anti-blink). If moved too far, rollback + punish.
+        if (blinkEnabled) {
+            boolean inVelocityWindow = (now - st.lastVelocityAt) <= blinkIgnoreAfterVelocityMs;
+            if (!inVelocityWindow) {
+                double dist = st.lastLoc.distance(to);
+                if (dist > blinkMaxDistance) {
+                    double next = vl.addVl(p.getUniqueId(), CheckType.FLY, blinkVlAdd);
+                    alert(p, "BLINK", next, "dist=" + DF2.format(dist) + ",max=" + DF2.format(blinkMaxDistance));
+                    plugin.setback(p);
+
+                    double dmg = blinkPunishDamage;
+                    if (dmg > 0.0) {
+                        if (p.getHealth() - dmg <= 0.0) {
+                            DeathMessageListener.markSelfKill(plugin, p);
+                        }
+                        p.damage(dmg, p);
+                    }
+
+                    st.lastLoc = to.clone();
+                    st.lastMoveAt = now;
+                    return;
+                }
+            }
+        }
 
         if (p.isOnGround() && !isInWeirdBlock(p)) {
             plugin.updateLastSafe(p, to);
@@ -323,7 +364,7 @@ public final class MovementListener implements Listener {
     }
 
     private void alert(Player suspected, String check, double checkVl, String details) {
-        if (!alertsEnabled) return;
+        if (!alertsEnabled || !plugin.isChatDebugEnabled()) return;
         String msg = alertFormat
                 .replace("{player}", suspected.getName())
                 .replace("{check}", check)

@@ -117,3 +117,18 @@ nofall:
   # If true, applies Feather Falling reduction (12% per level). Otherwise, we call player.damage(raw) and let vanilla handle armor/enchant.
   use_feather_falling_formula: false
   debug: false
+
+
+debug_chat_default: true
+
+blink:
+  enabled: true
+  max_teleport_distance: 20.0
+  punish_damage: 2.0
+  vl_add: 2.0
+  ignore_after_velocity_ms: 1200
+
+nofall:
+  enabled: true
+  window_ms: 300
+  use_feather_falling_formula: false

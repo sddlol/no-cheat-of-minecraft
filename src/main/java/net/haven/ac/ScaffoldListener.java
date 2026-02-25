@@ -32,6 +32,8 @@ public final class ScaffoldListener implements Listener {
     private final String bypassPermission;
 
     private final boolean enabled;
+    private final double scaffoldPunishDamage;
+    private final boolean scaffoldBreakLastBlock;
     private final int windowMs;
     private final int minPlaces;
 
@@ -63,6 +65,8 @@ public final class ScaffoldListener implements Listener {
         this.bypassPermission = cfg.getString("bypass_permission", "anticheatlite.bypass");
 
         this.enabled = cfg.getBoolean("checks.scaffold.enabled", true);
+        this.scaffoldPunishDamage = cfg.getDouble("checks.scaffold.punish_damage", 2.0);
+        this.scaffoldBreakLastBlock = cfg.getBoolean("checks.scaffold.break_last_block", true);
         this.windowMs = cfg.getInt("checks.scaffold.window_ms", 1200);
         this.minPlaces = cfg.getInt("checks.scaffold.min_places", 6);
 
@@ -165,7 +169,7 @@ public final class ScaffoldListener implements Listener {
     }
 
     private void alert(Player suspected, String check, double checkVl, String details) {
-        if (!alertsEnabled) return;
+        if (!alertsEnabled || !plugin.isChatDebugEnabled()) return;
         String msg = alertFormat
                 .replace("{player}", suspected.getName())
                 .replace("{check}", check)
