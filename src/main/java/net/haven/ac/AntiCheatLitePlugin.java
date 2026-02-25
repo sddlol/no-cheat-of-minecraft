@@ -48,7 +48,7 @@ public final class AntiCheatLitePlugin extends JavaPlugin {
         reloadConfig();
         FileConfiguration cfg = getConfig();
 
-        chatDebugEnabled = cfg.getBoolean(\"debug_chat_default\", true);
+        chatDebugEnabled = cfg.getBoolean("debug_chat_default", true);
         if (violationManager != null) {
             violationManager.shutdown();
         }
@@ -153,8 +153,6 @@ Bukkit.getPluginManager().registerEvents(deathMessageListener, this);
     public static String color(String s) {
         return ChatColor.translateAlternateColorCodes('&', s);
     }
-}
-
 public boolean isChatDebugEnabled() {
     return chatDebugEnabled;
 }
