@@ -48,7 +48,8 @@ public final class AntiCheatLitePlugin extends JavaPlugin {
         reloadConfig();
         FileConfiguration cfg = getConfig();
 
-        chatDebugEnabled = cfg.getBoolean(\"debug_chat_default\", true);
+        // Whether to spam debug info to chat by default (can be toggled by command).
+        chatDebugEnabled = cfg.getBoolean("debug_chat_default", true);
         if (violationManager != null) {
             violationManager.shutdown();
         }
@@ -77,11 +78,12 @@ public final class AntiCheatLitePlugin extends JavaPlugin {
         }
         scaffoldListener = new ScaffoldListener(this, violationManager, cfg);
         Bukkit.getPluginManager().registerEvents(scaffoldListener, this);
-if (deathMessageListener != null) {
-    org.bukkit.event.HandlerList.unregisterAll(deathMessageListener);
-}
-deathMessageListener = new DeathMessageListener(this);
-Bukkit.getPluginManager().registerEvents(deathMessageListener, this);
+
+        if (deathMessageListener != null) {
+            org.bukkit.event.HandlerList.unregisterAll(deathMessageListener);
+        }
+        deathMessageListener = new DeathMessageListener(this);
+        Bukkit.getPluginManager().registerEvents(deathMessageListener, this);
 
 
         if (noFallListener != null) {
@@ -153,12 +155,12 @@ Bukkit.getPluginManager().registerEvents(deathMessageListener, this);
     public static String color(String s) {
         return ChatColor.translateAlternateColorCodes('&', s);
     }
-}
 
-public boolean isChatDebugEnabled() {
-    return chatDebugEnabled;
-}
+    public boolean isChatDebugEnabled() {
+        return chatDebugEnabled;
+    }
 
-public void setChatDebugEnabled(boolean enabled) {
-    this.chatDebugEnabled = enabled;
+    public void setChatDebugEnabled(boolean enabled) {
+        this.chatDebugEnabled = enabled;
+    }
 }
