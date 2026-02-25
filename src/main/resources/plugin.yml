@@ -1,0 +1,25 @@
+name: AntiCheatLite
+version: 1.2.2
+main: net.haven.ac.AntiCheatLitePlugin
+api-version: 1.16
+author: haven
+website: https://docs.papermc.io/
+commands:
+  acreload:
+    description: Reload AntiCheatLite config.
+    permission: anticheatlite.admin
+    usage: /acreload
+  acstatus:
+    description: Show your (or another player's) current violation levels.
+    permission: anticheatlite.admin
+    usage: /acstatus [player]
+permissions:
+  anticheatlite.alert:
+    description: Receive anti-cheat alerts.
+    default: op
+  anticheatlite.admin:
+    description: Use AntiCheatLite admin commands.
+    default: op
+  anticheatlite.bypass:
+    description: Bypass all AntiCheatLite checks.
+    default: op

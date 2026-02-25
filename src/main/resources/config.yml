@@ -1,0 +1,91 @@
+# AntiCheatLite configuration (Paper 1.16.5)
+
+bypass_permission: anticheatlite.bypass
+
+alerts:
+  enabled: true
+  format: "&c[AC]&7 {player} &f{check} &7VL={vl} &8({details})"
+
+punishments:
+  # Action when total VL exceeds threshold.
+  # Options: NONE, SETBACK, KICK
+  action: SETBACK
+  threshold_vl: 6.0
+
+  # If true: on ANY flag (any check) we will immediately SETBACK (teleport back)
+  # to annoy blatant cheats. This does NOT kick; kick still uses threshold.
+  setback_on_flag: true
+
+checks:
+  speed:
+    enabled: true
+    # Vanilla refs:
+    # - walk ~4.317 bps, sprint ~5.612 bps (~+30%)
+    # - Speed effect: +20% movement speed per level
+    base_walk_bps: 4.32
+    sprint_multiplier: 1.30
+    # Sprint-jump spikes are common (esp. with tick jitter); allow extra headroom while airborne.
+    air_bonus_bps: 2.4
+    speed_potion_multiplier_per_level: 0.20
+    sample_window_ms: 450
+    min_samples: 3
+    min_move_ms: 35
+    max_move_ms: 220
+    grace_bps: 0.45
+    peak_slack_bps: 1.2
+
+    # legacy (kept for old configs; no longer used by default)
+    base_threshold_bps: 8.0
+    potion_allowance_bps_per_amp: 1.2
+    ignore_after_velocity_ms: 1200
+    vl_add: 1.0
+
+  fly:
+    enabled: true
+    min_air_ticks: 14
+    max_abs_y_delta_per_tick: 0.02
+    vl_add: 1.5
+
+  reach:
+    enabled: true
+    base_blocks: 3.20
+    ping_comp_blocks_per_ms: 0.0015
+    ping_comp_cap_blocks: 0.35
+    vl_add: 2.0
+    cancel_on_flag: false
+
+  killaura:
+    enabled: true
+    max_angle_deg: 65.0
+    switch_window_ms: 250
+    vl_add: 1.5
+    cancel_on_flag: false
+    check_line_of_sight: true
+
+  autoclicker:
+    enabled: true
+    window_ms: 1000
+    min_cps: 12
+    instant_cps: 14
+    max_stddev_ms: 6.0
+    instant_max_stddev_ms: 3.5
+    vl_add: 1.2
+    vl_add_instant: 3.0
+    # Mining (left-click block) creates very stable/high-rate arm swings on many clients.
+    # Ignore arm swings shortly after block-damage to avoid false AutoClicker flags.
+    ignore_digging: true
+    dig_ignore_ms: 350
+
+  scaffold:
+    enabled: true
+    window_ms: 1200
+    min_places: 6
+    min_pitch_deg: 75.0
+    max_yaw_stddev_deg: 1.5
+    max_pitch_stddev_deg: 1.2
+    snap_yaw_deg: 35.0
+    snap_pitch_deg: 25.0
+    max_horizontal_dist_blocks: 1.6
+    max_vertical_offset_blocks: 2.0
+    vl_add: 2.0
+    cancel_on_flag: true
