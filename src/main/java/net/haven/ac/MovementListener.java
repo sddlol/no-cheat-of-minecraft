@@ -23,23 +23,19 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public final class MovementListener implements Listener {
 
-    private final java.util.Map<java.util.UUID, Long> lastMoveNs = new java.util.HashMap<>();
-    private final java.util.Map<java.util.UUID, java.util.ArrayDeque<Double>> bpsWindow = new java.util.HashMap<>();
-    private final java.util.Map<java.util.UUID, java.util.ArrayDeque<Long>> tWindow = new java.util.HashMap<>();
-
-
     private final AntiCheatLitePlugin plugin;
     private final ViolationManager vl;
+    private final FileConfiguration cfg;
 
     private final boolean alertsEnabled;
     private final String alertFormat;
     private final String bypassPermission;
 
+    // Existing speed check (kept)
     private final boolean speedEnabled;
     private final long speedIgnoreAfterVelocityMs;
     private final double speedVlAdd;
 
-    // Speed tuning (new)
     private final double speedBaseWalkBps;
     private final double speedSprintMultiplier;
     private final double speedAirBonusBps;
@@ -50,6 +46,28 @@ public final class MovementListener implements Listener {
     private final int speedMaxMoveMs;
     private final double speedGraceBps;
     private final double speedPeakSlackBps;
+
+    // New: movement simulation (stable / PVP-friendly)
+    private final boolean simEnabled;
+    private final long simIgnoreAfterVelocityMs;
+    private final double simVlAdd;
+
+    private final int simSampleWindowMs;
+    private final int simMinSamples;
+    private final int simMinMoveMs;
+    private final int simMaxMoveMs;
+    private final double simGraceBps;
+    private final double simPeakSlackBps;
+
+    // MovementSimulator params
+    private final double simSpeedAttrToBps;
+    private final double simSprintMult;
+    private final double simSneakMult;
+    private final double simAirMult;
+    private final double simHeadHitAirMult;
+    private final double simSpeedPotionPerLevel;
+    private final double simSpecialEnvLooseMult;
+    private final double simBaseSlackBps;
 
     private final boolean flyEnabled;
     private final int flyMinAirTicks;
@@ -67,6 +85,7 @@ public final class MovementListener implements Listener {
     public MovementListener(AntiCheatLitePlugin plugin, ViolationManager vl, FileConfiguration cfg) {
         this.plugin = plugin;
         this.vl = vl;
+        this.cfg = cfg;
 
         this.alertsEnabled = cfg.getBoolean("alerts.enabled", true);
         this.alertFormat = cfg.getString("alerts.format", "&c[AC]&7 {player} &f{check} &7VL={vl} &8({details})");
@@ -76,7 +95,6 @@ public final class MovementListener implements Listener {
         this.speedIgnoreAfterVelocityMs = cfg.getLong("checks.speed.ignore_after_velocity_ms", 1200L);
         this.speedVlAdd = cfg.getDouble("checks.speed.vl_add", 1.0);
 
-        // New (more vanilla-like) speed model + jitter smoothing.
         this.speedBaseWalkBps = cfg.getDouble("checks.speed.base_walk_bps", 4.32);
         this.speedSprintMultiplier = cfg.getDouble("checks.speed.sprint_multiplier", 1.30);
         this.speedAirBonusBps = cfg.getDouble("checks.speed.air_bonus_bps", 2.4);
@@ -87,6 +105,27 @@ public final class MovementListener implements Listener {
         this.speedMaxMoveMs = cfg.getInt("checks.speed.max_move_ms", 220);
         this.speedGraceBps = cfg.getDouble("checks.speed.grace_bps", 0.45);
         this.speedPeakSlackBps = cfg.getDouble("checks.speed.peak_slack_bps", 1.2);
+
+        // Movement simulation config
+        this.simEnabled = cfg.getBoolean("checks.movement_sim.enabled", true);
+        this.simIgnoreAfterVelocityMs = cfg.getLong("checks.movement_sim.ignore_after_velocity_ms", 1200L);
+        this.simVlAdd = cfg.getDouble("checks.movement_sim.vl_add", 1.0);
+
+        this.simSampleWindowMs = cfg.getInt("checks.movement_sim.sample_window_ms", 550);
+        this.simMinSamples = cfg.getInt("checks.movement_sim.min_samples", 6);
+        this.simMinMoveMs = cfg.getInt("checks.movement_sim.min_move_ms", 20);
+        this.simMaxMoveMs = cfg.getInt("checks.movement_sim.max_move_ms", 220);
+        this.simGraceBps = cfg.getDouble("checks.movement_sim.grace_bps", 0.75);
+        this.simPeakSlackBps = cfg.getDouble("checks.movement_sim.peak_slack_bps", 1.25);
+
+        this.simSpeedAttrToBps = cfg.getDouble("checks.movement_sim.speed_attr_to_bps", 43.17);
+        this.simSprintMult = cfg.getDouble("checks.movement_sim.sprint_mult", 1.30);
+        this.simSneakMult = cfg.getDouble("checks.movement_sim.sneak_mult", 0.30);
+        this.simAirMult = cfg.getDouble("checks.movement_sim.air_mult", 1.08);
+        this.simHeadHitAirMult = cfg.getDouble("checks.movement_sim.head_hit_air_mult", 1.15);
+        this.simSpeedPotionPerLevel = cfg.getDouble("checks.movement_sim.speed_potion_per_level", 0.20);
+        this.simSpecialEnvLooseMult = cfg.getDouble("checks.movement_sim.special_env_loose_mult", 1.35);
+        this.simBaseSlackBps = cfg.getDouble("checks.movement_sim.base_slack_bps", 0.75);
 
         this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
         this.flyMinAirTicks = cfg.getInt("checks.fly.min_air_ticks", 14);
@@ -106,117 +145,6 @@ public final class MovementListener implements Listener {
     @EventHandler
     public void onJoin(PlayerJoinEvent e) {
         Player p = e.getPlayer();
-
-// Movement simulation (stable speed check) - PVP-friendly, anti-false-positive
-if (cfg.getBoolean("checks.movement_sim.enabled", true)) {
-    // Skip if other movement checks are skipping anyway
-    if (!MovementSimulator.shouldSkip(p) && !p.hasPermission(bypassPermission)) {
-        java.util.UUID uid = p.getUniqueId();
-
-        long nowNs = System.nanoTime();
-        long prevNs = lastMoveNs.getOrDefault(uid, nowNs);
-        lastMoveNs.put(uid, nowNs);
-
-        long dtMs = Math.max(1L, (nowNs - prevNs) / 1_000_000L);
-        int minDt = cfg.getInt("checks.movement_sim.min_dt_ms", 20);
-        int maxDt = cfg.getInt("checks.movement_sim.max_dt_ms", 220);
-
-        if (dtMs >= minDt && dtMs <= maxDt) {
-            double dx = e.getTo().getX() - e.getFrom().getX();
-            double dz = e.getTo().getZ() - e.getFrom().getZ();
-            double horiz = Math.sqrt(dx * dx + dz * dz);
-            double actualBps = horiz / (dtMs / 1000.0);
-
-            MovementSimulator.Config sc = new MovementSimulator.Config();
-            sc.speedAttrToBps = cfg.getDouble("checks.movement_sim.speed_attr_to_bps", 43.17);
-            sc.sprintMult = cfg.getDouble("checks.movement_sim.sprint_mult", 1.30);
-            sc.sneakMult = cfg.getDouble("checks.movement_sim.sneak_mult", 0.30);
-            sc.airMult = cfg.getDouble("checks.movement_sim.air_mult", 1.08);
-            sc.headHitAirMult = cfg.getDouble("checks.movement_sim.head_hit_air_mult", 1.15);
-            sc.speedPotionPerLevel = cfg.getDouble("checks.movement_sim.speed_potion_per_level", 0.20);
-            sc.specialEnvLooseMult = cfg.getDouble("checks.movement_sim.special_env_loose_mult", 1.35);
-            sc.baseSlackBps = cfg.getDouble("checks.movement_sim.base_slack_bps", 0.75);
-            sc.peakSlackBps = cfg.getDouble("checks.movement_sim.peak_slack_bps", 1.25);
-            sc.sampleWindowMs = cfg.getInt("checks.movement_sim.sample_window_ms", 550);
-            sc.minSamples = cfg.getInt("checks.movement_sim.min_samples", 6);
-            sc.violationAdd = cfg.getDouble("checks.movement_sim.violation_add", 1.0);
-            sc.peakViolationAdd = cfg.getDouble("checks.movement_sim.peak_violation_add", 2.5);
-
-            boolean onGround = p.isOnGround();
-            boolean sprinting = p.isSprinting();
-            boolean sneaking = p.isSneaking();
-
-            double allowed = MovementSimulator.allowedHorizontalBps(p, onGround, sprinting, sneaking, sc);
-
-            java.util.ArrayDeque<Double> w = simBpsWindow.computeIfAbsent(uid, k -> new java.util.ArrayDeque<>());
-            java.util.ArrayDeque<Long> tw = simTimeWindow.computeIfAbsent(uid, k -> new java.util.ArrayDeque<>());
-
-            w.addLast(actualBps);
-            tw.addLast(System.currentTimeMillis());
-
-            while (!tw.isEmpty() && (System.currentTimeMillis() - tw.peekFirst()) > sc.sampleWindowMs) {
-                tw.pollFirst();
-                if (!w.isEmpty()) w.pollFirst();
-            }
-
-            if (w.size() >= sc.minSamples) {
-                double sum = 0.0;
-                double max = 0.0;
-                for (double v : w) {
-                    sum += v;
-                    if (v > max) max = v;
-                }
-                double avg = sum / w.size();
-                double allowedPeak = allowed + sc.peakSlackBps;
-
-                if (avg > allowed) {
-                    double next = vl.addVl(uid, CheckType.MOVEMENT_SIM, sc.violationAdd);
-                    alert(p, "MOVE_SIM", next,
-                            "avg=" + DF2.format(avg) + " allowed=" + DF2.format(allowed));
-                    if (punishAction == PunishAction.SETBACK && setbackOnFlag) {
-                        plugin.setback(p);
-                    } else {
-                        maybePunish(p);
-                    }
-                } else if (max > allowedPeak) {
-                    double next = vl.addVl(uid, CheckType.MOVEMENT_SIM, sc.peakViolationAdd);
-                    alert(p, "MOVE_SIM", next,
-                            "peak=" + DF2.format(max) + " allowedPeak=" + DF2.format(allowedPeak));
-                    if (punishAction == PunishAction.SETBACK && setbackOnFlag) {
-                        plugin.setback(p);
-                    } else {
-                        maybePunish(p);
-                    }
-                }
-            }
-        }
-    }
-}
-            if (w.size() >= cfg.minSamples) {
-                double sum = 0.0;
-                double max = 0.0;
-                for (double v : w) {
-                    sum += v;
-                    if (v > max) max = v;
-                }
-                double avg = sum / w.size();
-
-                double allowedPeak = allowed + cfg.peakSlackBps;
-
-                if (avg > allowed) {
-                    violationManager.addViolation(p, CheckType.MOVEMENT_SIM, cfg.violationAdd,
-                            "sim avg=" + String.format("%.2f", avg) + " allowed=" + String.format("%.2f", allowed));
-                    if (plugin.isSetbackOnFlag()) violationManager.trySetback(p);
-                } else if (max > allowedPeak) {
-                    violationManager.addViolation(p, CheckType.MOVEMENT_SIM, cfg.peakViolationAdd,
-                            "sim peak=" + String.format("%.2f", max) + " allowedPeak=" + String.format("%.2f", allowedPeak));
-                    if (plugin.isSetbackOnFlag()) violationManager.trySetback(p);
-                }
-            }
-        }
-    }
-}
-
         states.put(p.getUniqueId(), new MoveState(p.getLocation(), System.currentTimeMillis()));
         plugin.updateLastSafe(p, p.getLocation());
     }
@@ -228,7 +156,8 @@ if (cfg.getBoolean("checks.movement_sim.enabled", true)) {
 
     @EventHandler(ignoreCancelled = true)
     public void onVelocity(PlayerVelocityEvent e) {
-        MoveState st = states.computeIfAbsent(e.getPlayer().getUniqueId(), k -> new MoveState(e.getPlayer().getLocation(), System.currentTimeMillis()));
+        MoveState st = states.computeIfAbsent(e.getPlayer().getUniqueId(),
+                k -> new MoveState(e.getPlayer().getLocation(), System.currentTimeMillis()));
         st.lastVelocityAt = System.currentTimeMillis();
     }
 
@@ -243,85 +172,11 @@ if (cfg.getBoolean("checks.movement_sim.enabled", true)) {
     @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
     public void onMove(PlayerMoveEvent e) {
         Player p = e.getPlayer();
-
-if (plugin.getConfig().getBoolean("checks.movement_sim.enabled", true)) {
-    if (!MovementSimulator.shouldSkip(p) && !p.hasPermission("anticheatlite.bypass")) {
-        java.util.UUID uid = p.getUniqueId();
-        long nowNs = System.nanoTime();
-        long prevNs = lastMoveNs.getOrDefault(uid, nowNs);
-        lastMoveNs.put(uid, nowNs);
-
-        long dtMs = Math.max(1L, (nowNs - prevNs) / 1_000_000L);
-        int minDt = plugin.getConfig().getInt("checks.movement_sim.min_dt_ms", 20);
-        int maxDt = plugin.getConfig().getInt("checks.movement_sim.max_dt_ms", 220);
-        if (dtMs >= minDt && dtMs <= maxDt) {
-            double dx = e.getTo().getX() - e.getFrom().getX();
-            double dz = e.getTo().getZ() - e.getFrom().getZ();
-            double horiz = Math.sqrt(dx * dx + dz * dz);
-            double actualBps = horiz / (dtMs / 1000.0);
-
-            MovementSimulator.Config cfg = new MovementSimulator.Config();
-            cfg.speedAttrToBps = plugin.getConfig().getDouble("checks.movement_sim.speed_attr_to_bps", 43.17);
-            cfg.sprintMult = plugin.getConfig().getDouble("checks.movement_sim.sprint_mult", 1.30);
-            cfg.sneakMult = plugin.getConfig().getDouble("checks.movement_sim.sneak_mult", 0.30);
-            cfg.airMult = plugin.getConfig().getDouble("checks.movement_sim.air_mult", 1.08);
-            cfg.headHitAirMult = plugin.getConfig().getDouble("checks.movement_sim.head_hit_air_mult", 1.15);
-            cfg.speedPotionPerLevel = plugin.getConfig().getDouble("checks.movement_sim.speed_potion_per_level", 0.20);
-            cfg.specialEnvLooseMult = plugin.getConfig().getDouble("checks.movement_sim.special_env_loose_mult", 1.35);
-            cfg.baseSlackBps = plugin.getConfig().getDouble("checks.movement_sim.base_slack_bps", 0.75);
-            cfg.peakSlackBps = plugin.getConfig().getDouble("checks.movement_sim.peak_slack_bps", 1.25);
-            cfg.sampleWindowMs = plugin.getConfig().getInt("checks.movement_sim.sample_window_ms", 550);
-            cfg.minSamples = plugin.getConfig().getInt("checks.movement_sim.min_samples", 6);
-            cfg.minDtMs = minDt;
-            cfg.maxDtMs = maxDt;
-            cfg.violationAdd = plugin.getConfig().getDouble("checks.movement_sim.violation_add", 1.0);
-            cfg.peakViolationAdd = plugin.getConfig().getDouble("checks.movement_sim.peak_violation_add", 2.5);
-
-            boolean onGround = p.isOnGround();
-            boolean sprinting = p.isSprinting();
-            boolean sneaking = p.isSneaking();
-            double allowed = MovementSimulator.allowedHorizontalBps(p, onGround, sprinting, sneaking, cfg);
-
-            java.util.ArrayDeque<Double> w = bpsWindow.computeIfAbsent(uid, k -> new java.util.ArrayDeque<>());
-            java.util.ArrayDeque<Long> tw = tWindow.computeIfAbsent(uid, k -> new java.util.ArrayDeque<>());
-            w.addLast(actualBps);
-            tw.addLast(System.currentTimeMillis());
-
-            while (!tw.isEmpty() && (System.currentTimeMillis() - tw.peekFirst()) > cfg.sampleWindowMs) {
-                tw.pollFirst();
-                if (!w.isEmpty()) w.pollFirst();
-            }
-
-            if (w.size() >= cfg.minSamples) {
-                double sum = 0.0;
-                double max = 0.0;
-                for (double v : w) {
-                    sum += v;
-                    if (v > max) max = v;
-                }
-                double avg = sum / w.size();
-
-                double allowedPeak = allowed + cfg.peakSlackBps;
-
-                if (avg > allowed) {
-                    violationManager.addViolation(p, CheckType.MOVEMENT_SIM, cfg.violationAdd,
-                            "sim avg=" + String.format("%.2f", avg) + " allowed=" + String.format("%.2f", allowed));
-                    if (plugin.isSetbackOnFlag()) violationManager.trySetback(p);
-                } else if (max > allowedPeak) {
-                    violationManager.addViolation(p, CheckType.MOVEMENT_SIM, cfg.peakViolationAdd,
-                            "sim peak=" + String.format("%.2f", max) + " allowedPeak=" + String.format("%.2f", allowedPeak));
-                    if (plugin.isSetbackOnFlag()) violationManager.trySetback(p);
-                }
-            }
-        }
-    }
-}
-
         if (p.hasPermission(bypassPermission)) return;
         if (p.getGameMode().name().equalsIgnoreCase("CREATIVE") || p.getGameMode().name().equalsIgnoreCase("SPECTATOR")) return;
         if (p.isInsideVehicle()) return;
         if (p.isFlying() && p.getAllowFlight()) return;
-        if (p.isGliding()) return; // Elytra
+        if (p.isGliding()) return;
 
         Location from = e.getFrom();
         Location to = e.getTo();
@@ -336,32 +191,25 @@ if (plugin.getConfig().getBoolean("checks.movement_sim.enabled", true)) {
         MoveState st = states.computeIfAbsent(p.getUniqueId(), k -> new MoveState(from, System.currentTimeMillis()));
         long now = System.currentTimeMillis();
 
-        // Always track rotations (needed for scaffold heuristics)
-        float yaw = to.getYaw();
-        float pitch = to.getPitch();
-        st.lastYaw = yaw;
-        st.lastPitch = pitch;
+        st.lastYaw = to.getYaw();
+        st.lastPitch = to.getPitch();
         st.lastRotAt = now;
 
-        // Ignore pure head rotation for movement checks, but keep rotation tracking.
         if (from.getX() == to.getX() && from.getY() == to.getY() && from.getZ() == to.getZ()) {
             return;
         }
 
         long dtMs = Math.max(1L, now - st.lastMoveAt);
 
-        // Update safe location when on ground and not in weird blocks.
         if (p.isOnGround() && !isInWeirdBlock(p)) {
             plugin.updateLastSafe(p, to);
         }
 
         boolean flaggedThisMove = false;
 
-        // SPEED CHECK
         if (speedEnabled) {
             boolean inVelocityWindow = (now - st.lastVelocityAt) <= speedIgnoreAfterVelocityMs;
             if (!inVelocityWindow) {
-                // jitter guard
                 if (dtMs < speedMinMoveMs || dtMs > speedMaxMoveMs) {
                     st.lastLoc = to.clone();
                     st.lastMoveAt = now;
@@ -373,16 +221,11 @@ if (plugin.getConfig().getBoolean("checks.movement_sim.enabled", true)) {
                 double horizontal = Math.sqrt(dx * dx + dz * dz);
                 double bps = horizontal / (dtMs / 1000.0);
 
-                // Rolling window average to avoid sprint-jump spikes.
                 st.addSpeedSample(now, bps, speedSampleWindowMs);
-                if (st.speedSamplesSize() < speedMinSamples) {
-                    // not enough data yet
-                } else {
+                if (st.speedSamplesSize() >= speedMinSamples) {
                     double avg = st.speedAvg();
                     double peak = st.speedPeak();
 
-                    // Budget based on vanilla constants.
-                    // (We intentionally avoid relying on optional APIs like getWalkSpeed()/attributes for 1.16.5 compatibility.)
                     double max = speedBaseWalkBps;
                     if (p.isSprinting()) max *= speedSprintMultiplier;
                     if (!p.isOnGround()) max += speedAirBonusBps;
@@ -402,7 +245,48 @@ if (plugin.getConfig().getBoolean("checks.movement_sim.enabled", true)) {
             }
         }
 
-        // FLY/HOVER CHECK
+        if (simEnabled) {
+            boolean inVelocityWindow = (now - st.lastVelocityAt) <= simIgnoreAfterVelocityMs;
+            if (!inVelocityWindow) {
+                if (dtMs >= simMinMoveMs && dtMs <= simMaxMoveMs) {
+                    double dx = to.getX() - st.lastLoc.getX();
+                    double dz = to.getZ() - st.lastLoc.getZ();
+                    double horizontal = Math.sqrt(dx * dx + dz * dz);
+                    double bps = horizontal / (dtMs / 1000.0);
+
+                    MovementSimulator.Config sc = new MovementSimulator.Config();
+                    sc.speedAttrToBps = simSpeedAttrToBps;
+                    sc.sprintMult = simSprintMult;
+                    sc.sneakMult = simSneakMult;
+                    sc.airMult = simAirMult;
+                    sc.headHitAirMult = simHeadHitAirMult;
+                    sc.speedPotionPerLevel = simSpeedPotionPerLevel;
+                    sc.specialEnvLooseMult = simSpecialEnvLooseMult;
+                    sc.baseSlackBps = simBaseSlackBps;
+                    sc.peakSlackBps = simPeakSlackBps;
+                    sc.sampleWindowMs = simSampleWindowMs;
+                    sc.minSamples = simMinSamples;
+
+                    double allowed = MovementSimulator.allowedHorizontalBps(
+                            p, p.isOnGround(), p.isSprinting(), p.isSneaking(), sc
+                    );
+
+                    st.addSimSample(now, bps, simSampleWindowMs);
+                    if (st.simSamplesSize() >= simMinSamples) {
+                        double avg = st.simAvg();
+                        double peak = st.simPeak();
+
+                        if (!isInWeirdBlock(p) && (avg > allowed + simGraceBps || peak > allowed + simGraceBps + simPeakSlackBps)) {
+                            double next = vl.addVl(p.getUniqueId(), CheckType.MOVEMENT_SIM, simVlAdd);
+                            alert(p, "MOVE_SIM", next,
+                                    "avg=" + DF2.format(avg) + ",peak=" + DF2.format(peak) + ",allow=" + DF2.format(allowed));
+                            flaggedThisMove = true;
+                        }
+                    }
+                }
+            }
+        }
+
         if (flyEnabled) {
             boolean onGround = p.isOnGround();
             if (onGround) {
@@ -420,11 +304,9 @@ if (plugin.getConfig().getBoolean("checks.movement_sim.enabled", true)) {
             }
         }
 
-        // Immediate setback-on-flag (your request)
         if (flaggedThisMove && punishAction == PunishAction.SETBACK && setbackOnFlag) {
-            e.setTo(from);
+            plugin.setback(p);
         } else {
-            // Threshold-based punishments (e.g., kick)
             maybePunish(p);
         }
 
@@ -483,6 +365,7 @@ if (plugin.getConfig().getBoolean("checks.movement_sim.enabled", true)) {
         private long lastRotAt;
 
         private final java.util.ArrayDeque<double[]> speedSamples = new java.util.ArrayDeque<>();
+        private final java.util.ArrayDeque<double[]> simSamples = new java.util.ArrayDeque<>();
 
         private MoveState(Location lastLoc, long lastMoveAt) {
             this.lastLoc = lastLoc.clone();
@@ -515,6 +398,30 @@ if (plugin.getConfig().getBoolean("checks.movement_sim.enabled", true)) {
         private double speedPeak() {
             double peak = 0.0;
             for (double[] s : speedSamples) if (s[1] > peak) peak = s[1];
+            return peak;
+        }
+
+        private void addSimSample(long now, double bps, int windowMs) {
+            simSamples.addLast(new double[]{now, bps});
+            while (!simSamples.isEmpty() && (now - (long) simSamples.peekFirst()[0]) > windowMs) {
+                simSamples.removeFirst();
+            }
+        }
+
+        private int simSamplesSize() {
+            return simSamples.size();
+        }
+
+        private double simAvg() {
+            if (simSamples.isEmpty()) return 0.0;
+            double sum = 0.0;
+            for (double[] s : simSamples) sum += s[1];
+            return sum / simSamples.size();
+        }
+
+        private double simPeak() {
+            double peak = 0.0;
+            for (double[] s : simSamples) if (s[1] > peak) peak = s[1];
             return peak;
         }
     }

@@ -21,6 +21,7 @@ public final class AntiCheatLitePlugin extends JavaPlugin {
     private CombatListener combatListener;
     private ClickListener clickListener;
     private ScaffoldListener scaffoldListener;
+    private NoFallListener noFallListener;
 
     // Last known "safe" location (usually last on-ground spot). Used for setbacks.
     private final Map<UUID, Location> lastSafe = new ConcurrentHashMap<>();
@@ -73,6 +74,12 @@ public final class AntiCheatLitePlugin extends JavaPlugin {
         }
         scaffoldListener = new ScaffoldListener(this, violationManager, cfg);
         Bukkit.getPluginManager().registerEvents(scaffoldListener, this);
+
+        if (noFallListener != null) {
+            org.bukkit.event.HandlerList.unregisterAll(noFallListener);
+        }
+        noFallListener = new NoFallListener(this, violationManager, cfg);
+        Bukkit.getPluginManager().registerEvents(noFallListener, this);
     }
 
     /** Update safe location for setbacks. */
