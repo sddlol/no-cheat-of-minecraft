@@ -160,3 +160,4 @@ public boolean isChatDebugEnabled() {
 public void setChatDebugEnabled(boolean enabled) {
     this.chatDebugEnabled = enabled;
 }
+}
