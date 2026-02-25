@@ -95,8 +95,8 @@ public final class CombatListener implements Listener {
 
         // REACH
         if (reachEnabled) {
-            Location eye = p.getEyeLocation();
-            double reach = ReachUtil.eyeToHitboxDistance(eye, target);
+            ReachUtil.ReachResult rr = ReachUtil.computeReach(p, (LivingEntity) target);
+            double reach = rr.distance;
 
             int ping = PingUtil.getPingMs(p);
             double pingExtra = Math.min(reachPingCompCap, ping * reachPingCompPerMs);
@@ -104,10 +104,17 @@ public final class CombatListener implements Listener {
 
             if (reach > allowed) {
                 double next = vl.addVl(p.getUniqueId(), CheckType.REACH, reachVlAdd);
-                alert(p, "REACH", next, "reach=" + DF2.format(reach) + ">" + DF2.format(allowed) + ", ping=" + ping + "ms");
+                alert(p, "REACH", next,
+                        "reach=" + DF2.format(reach) + ">" + DF2.format(allowed) +
+                                ", ping=" + ping + "ms" +
+                                (rr.rayIntersects ? ", ray" : ", fallback") +
+                                (rr.blocked ? ", blocked" : ""));
                 flagged = true;
                 if (reachCancelOnFlag) e.setCancelled(true);
             }
+
+            // If the hit is literally blocked by blocks, treat it as suspicious for aura too.
+            if (rr.blocked) flagged = true;
         }
 
         // KILLAURA heuristics

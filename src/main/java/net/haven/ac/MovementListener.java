@@ -329,19 +329,56 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
         }
 
         if (flyEnabled) {
-            boolean onGround = p.isOnGround();
-            if (onGround) {
+            if (isFlyExempt(p)) {
                 st.airTicks = 0;
+                st.hoverTicks = 0;
+                st.hasVy = false;
+            } else if (p.isOnGround()) {
+                st.airTicks = 0;
+                st.hoverTicks = 0;
+                st.vy = 0.0;
+                st.hasVy = true;
             } else {
                 st.airTicks++;
-                if (st.airTicks >= flyMinAirTicks) {
-                    double dy = to.getY() - from.getY();
-                    if (Math.abs(dy) <= flyMaxAbsYDelta && !isInWeirdBlock(p)) {
-                        double next = vl.addVl(p.getUniqueId(), CheckType.FLY, flyVlAdd);
-                        alert(p, "FLY", next, "airTicks=" + st.airTicks + ", dy=" + DF2.format(dy));
-                        flaggedThisMove = true;
-                    }
+                double dy = to.getY() - from.getY();
+
+                // Seed predicted vertical motion from the first air tick (usually jump/step/knock).
+                if (!st.hasVy || st.airTicks == 1) {
+                    st.vy = dy;
+                    st.hasVy = true;
                 }
+
+                // Predict using vanilla-like gravity/drag (1.16.x): v = (v - 0.08) * 0.98
+                double expectedDy = st.vy;
+                double predictedNextVy = (st.vy - 0.08D) * 0.98D;
+
+                boolean recentVelocity = (now - st.lastVelocityAt) < 600L;
+
+                // Hovering: near-zero dy for many ticks while in air (and not in liquids/ladders/web etc.)
+                if (Math.abs(dy) < 0.02D) st.hoverTicks++; else st.hoverTicks = 0;
+
+                double diff = Math.abs(dy - expectedDy);
+                boolean badHover = st.airTicks >= flyMinAirTicks && st.hoverTicks >= 8;
+                boolean badPhysics = st.airTicks >= flyMinAirTicks && !recentVelocity && diff > 0.22D;
+
+                // Keep the old "small dy" heuristic as a weaker signal, but only after some air ticks.
+                boolean badSmallDy = st.airTicks >= flyMinAirTicks && Math.abs(dy) <= flyMaxAbsYDelta;
+
+                if (!isInWeirdBlock(p) && (badHover || badPhysics || badSmallDy)) {
+                    double next = vl.addVl(p.getUniqueId(), CheckType.FLY, flyVlAdd);
+                    alert(p, "FLY", next,
+                            "airTicks=" + st.airTicks +
+                                    ", dy=" + DF2.format(dy) +
+                                    ", exp=" + DF2.format(expectedDy) +
+                                    ", diff=" + DF2.format(diff) +
+                                    (recentVelocity ? ", vel" : "") +
+                                    (badHover ? ", hover" : "") +
+                                    (badPhysics ? ", phys" : ""));
+                    flaggedThisMove = true;
+                }
+
+                st.vy = predictedNextVy;
+                st.hasVy = true;
             }
         }
 
@@ -395,11 +432,37 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
         return false;
     }
 
+    private boolean isFlyExempt(Player p) {
+        // Don't flag staff / creative / spectators, or players using legitimate movement mechanics.
+        try {
+            if (!p.isOnline()) return true;
+            if (p.getAllowFlight() || p.isFlying()) return true;
+            switch (p.getGameMode()) {
+                case CREATIVE:
+                case SPECTATOR:
+                    return true;
+                default:
+                    break;
+            }
+            if (p.isInsideVehicle()) return true;
+            if (p.isGliding()) return true;
+            if (p.isSwimming()) return true;
+            if (p.hasPotionEffect(PotionEffectType.LEVITATION)) return true;
+            if (p.hasPotionEffect(PotionEffectType.SLOW_FALLING)) return true;
+        } catch (Throwable ignored) {
+        }
+        return false;
+    }
+
     private static final class MoveState {
         private Location lastLoc;
         private long lastMoveAt;
         private long lastVelocityAt;
         private int airTicks;
+        private int hoverTicks;
+
+        private double vy;
+        private boolean hasVy;
 
         private float lastYaw;
         private float lastPitch;
@@ -413,6 +476,9 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
             this.lastMoveAt = lastMoveAt;
             this.lastVelocityAt = 0L;
             this.airTicks = 0;
+            this.hoverTicks = 0;
+            this.vy = 0.0;
+            this.hasVy = false;
             this.lastYaw = lastLoc.getYaw();
             this.lastPitch = lastLoc.getPitch();
             this.lastRotAt = lastMoveAt;
