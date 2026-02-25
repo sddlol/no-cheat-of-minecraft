@@ -6,5 +6,7 @@ public enum CheckType {
     REACH,
     KILLAURA,
     AUTOCLICKER,
-    SCAFFOLD
+    SCAFFOLD,
+    MOVEMENT_SIM,
+    NOFALL
 }

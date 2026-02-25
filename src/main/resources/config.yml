@@ -89,3 +89,31 @@ checks:
     max_vertical_offset_blocks: 2.0
     vl_add: 2.0
     cancel_on_flag: true
+
+
+movement_sim:
+  enabled: true
+  # Converts Attribute.GENERIC_MOVEMENT_SPEED (default 0.1) to blocks/second walking speed (~4.317 bps)
+  speed_attr_to_bps: 43.17
+  sprint_mult: 1.30
+  sneak_mult: 0.30
+  air_mult: 1.08
+  head_hit_air_mult: 1.15
+  speed_potion_per_level: 0.20
+  special_env_loose_mult: 1.35
+  base_slack_bps: 0.75
+  peak_slack_bps: 1.25
+  sample_window_ms: 550
+  min_samples: 6
+  min_dt_ms: 20
+  max_dt_ms: 220
+  violation_add: 1.0
+  peak_violation_add: 2.5
+
+
+nofall:
+  enabled: true
+  window_ms: 300
+  # If true, applies Feather Falling reduction (12% per level). Otherwise, we call player.damage(raw) and let vanilla handle armor/enchant.
+  use_feather_falling_formula: false
+  debug: false
