@@ -2,6 +2,7 @@ package net.haven.ac;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
@@ -157,6 +158,22 @@ public final class ScaffoldListener implements Listener {
             String details = "places=" + st.samples.size() + ", yawStd=" + DF2.format(yawStd) + ", pitchStd=" + DF2.format(pitchStd);
             if (snapped) details += ", snapped";
             alert(p, "SCAFFOLD", next, details);
+
+            // "Annoy" punishment: break the just-placed block (Grim-style: make the cheat annoying to use).
+            if (scaffoldBreakLastBlock && !e.isCancelled()) {
+                final Block b = e.getBlockPlaced();
+                final Material type = b.getType();
+                Bukkit.getScheduler().runTask(plugin, () -> {
+                    if (b.getType() == type) {
+                        b.setType(Material.AIR, false);
+                    }
+                });
+            }
+
+            // "Annoy" damage: default is 2.0 (=1 heart). If it kills them, death message becomes "被自己杀了".
+            if (scaffoldPunishDamage > 0.0) {
+                plugin.punishDamage(p, scaffoldPunishDamage, "SCAFFOLD flagged");
+            }
 
             if (cancelOnFlag) {
                 e.setCancelled(true);

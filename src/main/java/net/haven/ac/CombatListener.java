@@ -10,7 +10,6 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
-import org.bukkit.util.RayTraceResult;
 import org.bukkit.util.Vector;
 
 import java.text.DecimalFormat;
@@ -44,6 +43,8 @@ public final class CombatListener implements Listener {
     private final double auraVlAdd;
     private final boolean auraCancelOnFlag;
     private final boolean auraCheckLineOfSight;
+    private final boolean auraNullifyDamageOnBlocked;
+    private final double auraAnnoyDamage;
 
     private final PunishAction punishAction;
     private final double punishThreshold;
@@ -74,6 +75,8 @@ public final class CombatListener implements Listener {
         this.auraVlAdd = cfg.getDouble("checks.killaura.vl_add", 1.5);
         this.auraCancelOnFlag = cfg.getBoolean("checks.killaura.cancel_on_flag", false);
         this.auraCheckLineOfSight = cfg.getBoolean("checks.killaura.check_line_of_sight", true);
+        this.auraNullifyDamageOnBlocked = cfg.getBoolean("checks.killaura.nullify_damage_on_blocked", true);
+        this.auraAnnoyDamage = cfg.getDouble("checks.killaura.annoy_damage", AntiCheatLitePlugin.DEFAULT_PUNISH_DAMAGE);
 
         this.punishAction = PunishAction.fromString(cfg.getString("punishments.action", "SETBACK"));
         this.punishThreshold = cfg.getDouble("punishments.threshold_vl", 6.0);
@@ -135,9 +138,7 @@ public final class CombatListener implements Listener {
             boolean suspiciousLos = false;
             if (auraCheckLineOfSight) {
                 double dist = eye.distance(target.getLocation());
-                Vector dir = target.getLocation().toVector().subtract(eye.toVector()).normalize();
-                RayTraceResult r = eye.getWorld().rayTraceBlocks(eye, dir, dist, org.bukkit.FluidCollisionMode.NEVER, true);
-                if (r != null && r.getHitBlock() != null) suspiciousLos = true;
+                suspiciousLos = ReachUtil.isThroughWall(p, target, dist);
             }
 
             if (suspiciousAngle || suspiciousSwitch || suspiciousLos) {
@@ -158,6 +159,16 @@ public final class CombatListener implements Listener {
                 alert(p, "KILLAURA", next, details.toString());
                 flagged = true;
                 if (auraCancelOnFlag) e.setCancelled(true);
+
+                // Grim-style annoyance: if the hit is blocked by blocks, set damage to 0.
+                if (auraNullifyDamageOnBlocked && suspiciousLos && !e.isCancelled()) {
+                    e.setDamage(0.0);
+                }
+
+                // Annoy damage to attacker.
+                if (auraAnnoyDamage > 0.0) {
+                    plugin.punishDamage(p, auraAnnoyDamage, "KILLAURA flagged" + (suspiciousLos ? " (blocked)" : ""));
+                }
             }
 
             st.lastHitAt = now;

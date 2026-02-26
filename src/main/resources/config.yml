@@ -61,6 +61,10 @@ checks:
     vl_add: 1.5
     cancel_on_flag: false
     check_line_of_sight: true
+    # If true and line-of-sight is blocked, set the outgoing damage to 0.
+    nullify_damage_on_blocked: true
+    # "Annoy" damage dealt to the attacker when flagged (2.0 = 1 heart).
+    annoy_damage: 2.0
 
   autoclicker:
     enabled: true
@@ -89,6 +93,10 @@ checks:
     max_vertical_offset_blocks: 2.0
     vl_add: 2.0
     cancel_on_flag: true
+    # "Annoy" punishment: break the placed block immediately when flagged.
+    break_last_block: true
+    # "Annoy" damage dealt to the player when flagged (2.0 = 1 heart).
+    annoy_damage: 2.0
 
 
 movement_sim:

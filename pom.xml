@@ -4,7 +4,7 @@
 
   <groupId>net.haven</groupId>
   <artifactId>anticheatlite</artifactId>
-  <version>1.4.0</version>
+  <version>1.5.0</version>
   <name>AntiCheatLite</name>
   <description>Lightweight anti-cheat for Paper 1.16.5 (movement + reach/killaura/autoclicker + scaffold)</description>
 
@@ -16,16 +16,17 @@
 
   <repositories>
     <repository>
-      <id>papermc</id>
-      <url>https://repo.papermc.io/repository/maven-public/</url>
+      <id>spigotmc-repo</id>
+      <url>https://hub.spigotmc.org/nexus/content/repositories/snapshots/</url>
     </repository>
   </repositories>
 
   <dependencies>
+    <!-- Compile against 1.8.8 for binary compatibility across 1.8.x -> 1.21.x. -->
     <dependency>
-      <groupId>com.destroystokyo.paper</groupId>
-      <artifactId>paper-api</artifactId>
-      <version>1.16.5-R0.1-SNAPSHOT</version>
+      <groupId>org.spigotmc</groupId>
+      <artifactId>spigot-api</artifactId>
+      <version>1.8.8-R0.1-SNAPSHOT</version>
       <scope>provided</scope>
     </dependency>
   </dependencies>

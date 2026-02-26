@@ -1,5 +1,5 @@
 name: AntiCheatLite
-version: 1.4.0
+version: 1.5.0
 main: net.haven.ac.AntiCheatLitePlugin
 api-version: 1.16
 author: haven
@@ -13,6 +13,10 @@ commands:
     description: Show your (or another player's) current violation levels.
     permission: anticheatlite.admin
     usage: /acstatus [player]
+  acdebug:
+    description: Toggle AntiCheatLite chat debug alerts
+    usage: /acdebug [on|off]
+    permission: anticheatlite.admin
 permissions:
   anticheatlite.alert:
     description: Receive anti-cheat alerts.
@@ -23,7 +27,3 @@ permissions:
   anticheatlite.bypass:
     description: Bypass all AntiCheatLite checks.
     default: op
-acdebug:
-  description: Toggle AntiCheatLite chat debug alerts
-  usage: /acdebug [on|off|toggle]
-  permission: anticheatlite.admin

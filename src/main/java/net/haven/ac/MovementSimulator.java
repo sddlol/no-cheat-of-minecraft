@@ -2,16 +2,15 @@ package net.haven.ac;
 
 import org.bukkit.GameMode;
 import org.bukkit.Material;
-import org.bukkit.attribute.Attribute;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 import org.bukkit.potion.PotionEffect;
-import org.bukkit.potion.PotionEffectType;
+import java.lang.reflect.Method;
 
-/**
- * Conservative movement allowance model for Paper 1.16.5.
- * Designed for PVP: prefer fewer false positives over aggressive flags.
- */
+    /**
+     * Conservative movement allowance model that stays compatible from 1.8.x to modern versions.
+     * Designed for PVP: prefer fewer false positives over aggressive flags.
+     */
 public final class MovementSimulator {
 
     private MovementSimulator() {}
@@ -26,23 +25,22 @@ public final class MovementSimulator {
         return false;
     }
 
-    public static int getPotionLevel(Player p, PotionEffectType type) {
-        PotionEffect e = p.getPotionEffect(type);
-        if (e == null) return 0;
-        return Math.max(0, e.getAmplifier() + 1);
+    public static int getPotionLevel(Player p, String typeName) {
+        if (p == null || typeName == null) return 0;
+        int amp = Compat.potionAmplifier(p, typeName);
+        return Compat.hasPotion(p, typeName) ? Math.max(0, amp + 1) : 0;
     }
 
     public static boolean isSpecialEnvironment(Player p) {
-        if (p.isSwimming()) return true;
+        if (Compat.isSwimming(p)) return true;
         Material feet = p.getLocation().getBlock().getType();
         Material head = p.getEyeLocation().getBlock().getType();
         if (feet == Material.WATER || head == Material.WATER) return true;
         if (feet == Material.LAVA || head == Material.LAVA) return true;
         if (feet == Material.COBWEB) return true;
         if (feet == Material.LADDER || feet == Material.VINE) return true;
-        if (feet == Material.ICE || feet == Material.PACKED_ICE || feet == Material.BLUE_ICE) return true;
-        if (feet == Material.SLIME_BLOCK) return true;
-        if (feet == Material.HONEY_BLOCK) return true;
+        if (Compat.isOneOf(feet, "ICE", "PACKED_ICE", "BLUE_ICE")) return true;
+        if (Compat.isOneOf(feet, "SLIME_BLOCK", "HONEY_BLOCK")) return true;
         return false;
     }
 
@@ -55,19 +53,26 @@ public final class MovementSimulator {
     public static double allowedHorizontalBps(Player p, boolean onGround, boolean sprinting, boolean sneaking, Config cfg) {
         if (shouldSkip(p)) return Double.POSITIVE_INFINITY;
 
+        // 1.9+ has Attribute API; 1.8 doesn't. Use reflection.
         double attr = 0.1;
         try {
-            if (p.getAttribute(Attribute.GENERIC_MOVEMENT_SPEED) != null) {
-                attr = p.getAttribute(Attribute.GENERIC_MOVEMENT_SPEED).getValue();
+            Class<?> attrCls = Class.forName("org.bukkit.attribute.Attribute");
+            Object attrEnum = Enum.valueOf((Class<Enum>) attrCls.asSubclass(Enum.class), "GENERIC_MOVEMENT_SPEED");
+            Method getAttr = p.getClass().getMethod("getAttribute", attrCls);
+            Object inst = getAttr.invoke(p, attrEnum);
+            if (inst != null) {
+                Method getVal = inst.getClass().getMethod("getValue");
+                attr = ((Number) getVal.invoke(inst)).doubleValue();
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable ignored) {
+        }
 
         double bps = attr * cfg.speedAttrToBps; // default 0.1 -> ~4.317 bps
 
         if (sprinting) bps *= cfg.sprintMult;
         if (sneaking) bps *= cfg.sneakMult;
 
-        int speedLv = getPotionLevel(p, PotionEffectType.SPEED);
+        int speedLv = getPotionLevel(p, "SPEED");
         if (speedLv > 0) {
             bps *= (1.0 + cfg.speedPotionPerLevel * speedLv);
         }

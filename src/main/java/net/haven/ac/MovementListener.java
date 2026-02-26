@@ -191,7 +191,7 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
         if (p.getGameMode().name().equalsIgnoreCase("CREATIVE") || p.getGameMode().name().equalsIgnoreCase("SPECTATOR")) return;
         if (p.isInsideVehicle()) return;
         if (p.isFlying() && p.getAllowFlight()) return;
-        if (p.isGliding()) return;
+        if (Compat.isGliding(p)) return;
 
         // Sticky setback / freeze: keep fast fly/blink from drifting out of range.
         SetbackManager sm = plugin.getSetbackManager();
@@ -443,8 +443,7 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
         if (head == Material.WATER || head == Material.LAVA) return true;
         if (feet == Material.LADDER || feet == Material.VINE) return true;
         if (feet == Material.COBWEB) return true;
-        if (feet == Material.SLIME_BLOCK) return true;
-        if (feet == Material.HONEY_BLOCK) return true;
+        if (Compat.isOneOf(feet, "SLIME_BLOCK", "HONEY_BLOCK")) return true;
 
         return false;
     }
@@ -462,10 +461,10 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
                     break;
             }
             if (p.isInsideVehicle()) return true;
-            if (p.isGliding()) return true;
-            if (p.isSwimming()) return true;
-            if (p.hasPotionEffect(PotionEffectType.LEVITATION)) return true;
-            if (p.hasPotionEffect(PotionEffectType.SLOW_FALLING)) return true;
+            if (Compat.isGliding(p)) return true;
+            if (Compat.isSwimming(p)) return true;
+            if (Compat.hasPotion(p, "LEVITATION")) return true;
+            if (Compat.hasPotion(p, "SLOW_FALLING")) return true;
         } catch (Throwable ignored) {
         }
         return false;

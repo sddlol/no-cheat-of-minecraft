@@ -18,6 +18,9 @@ public final class AntiCheatLitePlugin extends JavaPlugin {
 
     private ViolationManager violationManager;
     private boolean chatDebugEnabled;
+
+    /** Default "annoy" damage (in half-hearts). 2.0 = 1 heart. */
+    public static final double DEFAULT_PUNISH_DAMAGE = 2.0;
     private SetbackManager setbackManager;
     private DeathMessageListener deathMessageListener;
     private MovementListener movementListener;
@@ -160,7 +163,40 @@ public final class AntiCheatLitePlugin extends JavaPlugin {
             return true;
         }
 
+        if (name.equals("acdebug")) {
+            boolean newState;
+            if (args.length == 0) {
+                newState = !isChatDebugEnabled();
+            } else {
+                String v = args[0].toLowerCase(Locale.ROOT);
+                newState = v.equals("on") || v.equals("true") || v.equals("1") || v.equals("enable") || v.equals("yes");
+            }
+            setChatDebugEnabled(newState);
+            sender.sendMessage(color("&b[AC] Chat debug " + (newState ? "&aON" : "&cOFF")));
+            return true;
+        }
+
         return false;
+    }
+
+    /**
+     * Apply "annoy" damage when a cheat is detected.
+     * If this damage would kill the player, the death message is overridden to "被自己杀了".
+     */
+    public void punishDamage(Player p, double damage, String debugReason) {
+        if (p == null || !p.isOnline()) return;
+        if (damage <= 0) return;
+
+        double finalHealth = p.getHealth() - damage;
+        if (finalHealth <= 0.0) {
+            DeathMessageListener.markSelfKill(this, p);
+        }
+
+        p.damage(damage);
+
+        if (isChatDebugEnabled() && debugReason != null && !debugReason.isEmpty()) {
+            p.sendMessage(color("&8[ACDBG] &7" + debugReason + " &8(-" + damage + ")"));
+        }
     }
 
     public static String color(String s) {
