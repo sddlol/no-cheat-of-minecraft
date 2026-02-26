@@ -193,6 +193,23 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
         if (p.isFlying() && p.getAllowFlight()) return;
         if (p.isGliding()) return;
 
+        // Sticky setback / freeze: keep fast fly/blink from drifting out of range.
+        SetbackManager sm = plugin.getSetbackManager();
+        if (sm != null) {
+            sm.tickDownFreeze(p);
+            if (sm.isFrozen(p)) {
+                Location safe = sm.getLastSafe(p);
+                Location to = e.getTo();
+                if (safe != null && to != null && safe.getWorld() != null && p.getWorld() != null && p.getWorld().equals(safe.getWorld())) {
+                    Location lock = safe.clone();
+                    lock.setYaw(to.getYaw());
+                    lock.setPitch(to.getPitch());
+                    e.setTo(lock);
+                }
+                return;
+            }
+        }
+
         Location from = e.getFrom();
         Location to = e.getTo();
         if (to == null) return;

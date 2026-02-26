@@ -18,6 +18,7 @@ public final class AntiCheatLitePlugin extends JavaPlugin {
 
     private ViolationManager violationManager;
     private boolean chatDebugEnabled;
+    private SetbackManager setbackManager;
     private DeathMessageListener deathMessageListener;
     private MovementListener movementListener;
     private CombatListener combatListener;
@@ -54,6 +55,11 @@ public final class AntiCheatLitePlugin extends JavaPlugin {
             violationManager.shutdown();
         }
         violationManager = new ViolationManager(this, cfg);
+
+        if (setbackManager == null) {
+            setbackManager = new SetbackManager(this);
+        }
+        setbackManager.reloadFromConfig();
 
         if (movementListener != null) {
             org.bukkit.event.HandlerList.unregisterAll(movementListener);
@@ -99,17 +105,22 @@ public final class AntiCheatLitePlugin extends JavaPlugin {
         lastSafe.put(p.getUniqueId(), loc.clone());
     }
 
+    // Package-private access for SetbackManager.
+    Location getLastSafeInternal(UUID id) {
+        return lastSafe.get(id);
+    }
+
+    public SetbackManager getSetbackManager() {
+        return setbackManager;
+    }
+
     /**
      * Teleport player back to last safe location (if available).
      * This is used as a "setback" to annoy cheats on flag.
      */
     public void setback(Player p) {
-        if (p == null || !p.isOnline()) return;
-        Location safe = lastSafe.get(p.getUniqueId());
-        if (safe == null || safe.getWorld() == null) return;
-        // Avoid cross-world teleports.
-        if (p.getWorld() != null && !p.getWorld().equals(safe.getWorld())) return;
-        p.teleport(safe);
+        if (setbackManager == null) return;
+        setbackManager.setback(p);
     }
 
     @Override
