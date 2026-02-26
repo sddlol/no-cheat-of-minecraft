@@ -1,0 +1,235 @@
+*** Begin Patch
+*** Update File: b/src/main/java/net/haven/ac/AntiCheatLitePlugin.java
+@@
+ public class AntiCheatLitePlugin extends JavaPlugin {
+     private ViolationManager violationManager;
+     private boolean chatDebugEnabled = false; // toggled by /acdebug
++    private boolean chatDebugBroadcastAll = false; // when true, send debug alerts to ALL players
+ 
+     @Override
+     public void onEnable() {
+         // Initialize the violation manager
+         violationManager = new ViolationManager();
+@@
+     @Override
+     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+         if (command.getName().equalsIgnoreCase("acdebug")) {
+             if (!(sender instanceof Player)) {
+                 sender.sendMessage(ChatColor.RED + "This command can only be used by players.");
+                 return true;
+             }
+             Player player = (Player) sender;
+ 
+-            // Toggle the debug state
+-            chatDebugEnabled = !chatDebugEnabled;
+-            player.sendMessage(ChatColor.GREEN + "[AntiCheatLite] Debug mode is now " + (chatDebugEnabled ? "enabled" : "disabled") + ".");
++            // Sub-commands:
++            //   /acdebug            -> toggle debug on/off
++            //   /acdebug all        -> toggle broadcasting debug alerts to ALL players (requires op or anticheatlite.admin)
++            //   /acdebug staff      -> force broadcast-to-all off (same permission as above)
++            if (args.length >= 1) {
++                String sub = args[0].toLowerCase();
++
++                if (sub.equals("all") || sub.equals("broadcast")) {
++                    if (!player.isOp() && !player.hasPermission("anticheatlite.admin")) {
++                        player.sendMessage(ChatColor.RED + "[AntiCheatLite] You do not have permission to broadcast debug alerts to everyone.");
++                        return true;
++                    }
++                    if (!chatDebugEnabled) {
++                        chatDebugEnabled = true;
++                    }
++                    chatDebugBroadcastAll = !chatDebugBroadcastAll;
++                    player.sendMessage(ChatColor.GREEN + "[AntiCheatLite] Debug alerts will now be sent to " + (chatDebugBroadcastAll ? "ALL players" : "staff only") + ".");
++                    return true;
++                }
++
++                if (sub.equals("staff") || sub.equals("off") || sub.equals("private")) {
++                    if (!player.isOp() && !player.hasPermission("anticheatlite.admin")) {
++                        player.sendMessage(ChatColor.RED + "[AntiCheatLite] You do not have permission to change debug broadcast mode.");
++                        return true;
++                    }
++                    chatDebugBroadcastAll = false;
++                    player.sendMessage(ChatColor.GREEN + "[AntiCheatLite] Debug alerts will now be sent to staff only.");
++                    return true;
++                }
++            }
++
++            // Toggle the debug state
++            chatDebugEnabled = !chatDebugEnabled;
++            if (!chatDebugEnabled) {
++                chatDebugBroadcastAll = false;
++            }
++            player.sendMessage(ChatColor.GREEN + "[AntiCheatLite] Debug mode is now " + (chatDebugEnabled ? "enabled" : "disabled") + ".");
+ 
+             return true;
+         }
+ 
+         return false;
+     }
+@@
+     public boolean isChatDebugEnabled() {
+         return chatDebugEnabled;
+     }
+ 
+     public void setChatDebugEnabled(boolean chatDebugEnabled) {
+         this.chatDebugEnabled = chatDebugEnabled;
++        if (!chatDebugEnabled) {
++            // turning off debug implies no broadcasting
++            this.chatDebugBroadcastAll = false;
++        }
+     }
++
++    public boolean isChatDebugBroadcastAll() {
++        return chatDebugBroadcastAll;
++    }
++
++    public void setChatDebugBroadcastAll(boolean chatDebugBroadcastAll) {
++        this.chatDebugBroadcastAll = chatDebugBroadcastAll;
++    }
+ }
+*** End Patch
+*** Begin Patch
+*** Update File: b/src/main/java/net/haven/ac/ClickListener.java
+@@
+     private void alert(Player player, String check, double vl) {
+         if (!plugin.isChatDebugEnabled()) return;
+ 
+         String msg = ChatColor.RED + "[AntiCheatLite] " + ChatColor.YELLOW + player.getName() +
+                 ChatColor.RED + " failed " + ChatColor.AQUA + check + ChatColor.RED +
+                 " (VL: " + ChatColor.WHITE + String.format("%.1f", vl) + ChatColor.RED + ")";
+ 
+-        for (Player online : Bukkit.getOnlinePlayers()) {
+-            if (online.hasPermission("anticheatlite.alert")) {
+-                online.sendMessage(msg);
+-            }
+-        }
++        if (plugin.isChatDebugBroadcastAll()) {
++            for (Player online : Bukkit.getOnlinePlayers()) {
++                online.sendMessage(msg);
++            }
++        } else {
++            for (Player online : Bukkit.getOnlinePlayers()) {
++                if (online.hasPermission("anticheatlite.alert")) {
++                    online.sendMessage(msg);
++                }
++            }
++        }
+     }
+ }
+*** End Patch
+*** Begin Patch
+*** Update File: b/src/main/java/net/haven/ac/CombatListener.java
+@@
+     private void alert(Player player, String checkName, double vl) {
+         if (!plugin.isChatDebugEnabled()) return;
+ 
+         String msg = ChatColor.RED + "[AntiCheatLite] " + ChatColor.YELLOW + player.getName() +
+                 ChatColor.RED + " failed " + ChatColor.AQUA + checkName + ChatColor.RED +
+                 " (VL: " + ChatColor.WHITE + String.format("%.1f", vl) + ChatColor.RED + ")";
+ 
+-        for (Player online : Bukkit.getOnlinePlayers()) {
+-            if (online.hasPermission("anticheatlite.alert")) {
+-                online.sendMessage(msg);
+-            }
+-        }
++        if (plugin.isChatDebugBroadcastAll()) {
++            for (Player online : Bukkit.getOnlinePlayers()) {
++                online.sendMessage(msg);
++            }
++        } else {
++            for (Player online : Bukkit.getOnlinePlayers()) {
++                if (online.hasPermission("anticheatlite.alert")) {
++                    online.sendMessage(msg);
++                }
++            }
++        }
+     }
+ }
+*** End Patch
+*** Begin Patch
+*** Update File: b/src/main/java/net/haven/ac/MovementListener.java
+@@
+     private void alert(Player player, String checkName, double vl) {
+         if (!plugin.isChatDebugEnabled()) return;
+ 
+         String msg = ChatColor.RED + "[AntiCheatLite] " + ChatColor.YELLOW + player.getName() +
+                 ChatColor.RED + " failed " + ChatColor.AQUA + checkName + ChatColor.RED +
+                 " (VL: " + ChatColor.WHITE + String.format("%.1f", vl) + ChatColor.RED + ")";
+ 
+-        for (Player online : Bukkit.getOnlinePlayers()) {
+-            if (online.hasPermission("anticheatlite.alert")) {
+-                online.sendMessage(msg);
+-            }
+-        }
++        if (plugin.isChatDebugBroadcastAll()) {
++            for (Player online : Bukkit.getOnlinePlayers()) {
++                online.sendMessage(msg);
++            }
++        } else {
++            for (Player online : Bukkit.getOnlinePlayers()) {
++                if (online.hasPermission("anticheatlite.alert")) {
++                    online.sendMessage(msg);
++                }
++            }
++        }
+     }
+ }
+*** End Patch
+*** Begin Patch
+*** Update File: b/src/main/java/net/haven/ac/NoFallListener.java
+@@
+     private void alert(Player player, String checkName, double vl) {
+         if (!plugin.isChatDebugEnabled()) return;
+ 
+         String msg = ChatColor.RED + "[AntiCheatLite] " + ChatColor.YELLOW + player.getName() +
+                 ChatColor.RED + " failed " + ChatColor.AQUA + checkName + ChatColor.RED +
+                 " (VL: " + ChatColor.WHITE + String.format("%.1f", vl) + ChatColor.RED + ")";
+ 
+-        for (Player online : Bukkit.getOnlinePlayers()) {
+-            if (online.hasPermission("anticheatlite.alert")) {
+-                online.sendMessage(msg);
+-            }
+-        }
++        if (plugin.isChatDebugBroadcastAll()) {
++            for (Player online : Bukkit.getOnlinePlayers()) {
++                online.sendMessage(msg);
++            }
++        } else {
++            for (Player online : Bukkit.getOnlinePlayers()) {
++                if (online.hasPermission("anticheatlite.alert")) {
++                    online.sendMessage(msg);
++                }
++            }
++        }
+     }
+ }
+*** End Patch
+*** Begin Patch
+*** Update File: b/src/main/java/net/haven/ac/ScaffoldListener.java
+@@
+     private void alert(Player player, String checkName, double vl) {
+         if (!plugin.isChatDebugEnabled()) return;
+ 
+         String msg = ChatColor.RED + "[AntiCheatLite] " + ChatColor.YELLOW + player.getName() +
+                 ChatColor.RED + " failed " + ChatColor.AQUA + checkName + ChatColor.RED +
+                 " (VL: " + ChatColor.WHITE + String.format("%.1f", vl) + ChatColor.RED + ")";
+ 
+-        for (Player online : Bukkit.getOnlinePlayers()) {
+-            if (online.hasPermission("anticheatlite.alert")) {
+-                online.sendMessage(msg);
+-            }
+-        }
++        if (plugin.isChatDebugBroadcastAll()) {
++            for (Player online : Bukkit.getOnlinePlayers()) {
++                online.sendMessage(msg);
++            }
++        } else {
++            for (Player online : Bukkit.getOnlinePlayers()) {
++                if (online.hasPermission("anticheatlite.alert")) {
++                    online.sendMessage(msg);
++                }
++            }
++        }
+     }
+ }
+*** End Patch

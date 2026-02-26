@@ -427,9 +427,7 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
         msg = AntiCheatLitePlugin.color(msg);
 
         for (Player online : Bukkit.getOnlinePlayers()) {
-            if (online.hasPermission("anticheatlite.alert")) {
-                online.sendMessage(msg);
-            }
+            online.sendMessage(msg);
         }
         plugin.getLogger().info("[AC] " + suspected.getName() + " " + check + " VL=" + DF2.format(checkVl) + " (" + details + ")");
     }
