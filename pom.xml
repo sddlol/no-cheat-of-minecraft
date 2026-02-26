@@ -19,6 +19,12 @@
       <id>spigotmc-repo</id>
       <url>https://hub.spigotmc.org/nexus/content/repositories/snapshots/</url>
     </repository>
+
+    <!-- Spigot 1.8.x depends on net.md-5:bungeecord-chat:1.8-SNAPSHOT, which is mirrored by Aikar's repository. -->
+    <repository>
+      <id>aikar</id>
+      <url>https://repo.aikar.co/nexus/content/repositories/aikar/</url>
+    </repository>
   </repositories>
 
   <dependencies>
