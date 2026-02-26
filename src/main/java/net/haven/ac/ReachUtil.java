@@ -72,4 +72,41 @@ public final class ReachUtil {
         // Conservative 1.8 fallback: if hasLineOfSight already false, treat as wall.
         return true;
     }
+
+    public static class ReachResult {
+        public final double distance;
+        public final boolean blocked;
+        public final boolean rayIntersects; // best-effort (true when we believe hit line is valid)
+        public ReachResult(double distance, boolean blocked, boolean rayIntersects) {
+            this.distance = distance;
+            this.blocked = blocked;
+            this.rayIntersects = rayIntersects;
+        }
+    }
+
+    /**
+     * Cross-version reach compute:
+     * - distance is eye->target bounding box center distance (approx).
+     * - blocked uses Player#hasLineOfSight when available, otherwise false.
+     */
+    public static ReachResult computeReach(Player attacker, LivingEntity target) {
+        if (attacker == null || target == null) return new ReachResult(0.0, false, false);
+        Location eye = attacker.getEyeLocation();
+        // Approximate: use target eye location for living entities.
+        Location tloc;
+        try {
+            tloc = target.getEyeLocation();
+        } catch (Throwable ignored) {
+            tloc = target.getLocation();
+        }
+        double dist = eye.getWorld() != null && tloc.getWorld() != null && eye.getWorld().equals(tloc.getWorld())
+                ? eye.distance(tloc)
+                : 0.0;
+
+        boolean blocked = !Compat.hasLineOfSight(attacker, target);
+        // We don't do full ray/hitbox math here; treat "not blocked" as intersects.
+        boolean intersects = !blocked;
+        return new ReachResult(dist, blocked, intersects);
+    }
+
 }

@@ -289,7 +289,7 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
                     if (!p.isOnGround()) max += speedAirBonusBps;
 
                     int level = 0;
-                    PotionEffect spd = p.getPotionEffect(PotionEffectType.SPEED);
+                    PotionEffect spd = Compat.getPotionEffect(p, PotionEffectType.SPEED);
                     if (spd != null) level = spd.getAmplifier() + 1;
                     max *= (1.0 + (level * speedPotionMultiplierPerLevel));
 
@@ -442,7 +442,7 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
         if (feet == Material.WATER || feet == Material.LAVA) return true;
         if (head == Material.WATER || head == Material.LAVA) return true;
         if (feet == Material.LADDER || feet == Material.VINE) return true;
-        if (feet == Material.COBWEB) return true;
+        if (feet == Compat.material("COBWEB","WEB")) return true;
         if (Compat.isOneOf(feet, "SLIME_BLOCK", "HONEY_BLOCK")) return true;
 
         return false;

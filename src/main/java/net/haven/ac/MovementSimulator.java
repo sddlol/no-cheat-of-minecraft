@@ -37,7 +37,7 @@ public final class MovementSimulator {
         Material head = p.getEyeLocation().getBlock().getType();
         if (feet == Material.WATER || head == Material.WATER) return true;
         if (feet == Material.LAVA || head == Material.LAVA) return true;
-        if (feet == Material.COBWEB) return true;
+        if (feet == Compat.material("COBWEB","WEB")) return true;
         if (feet == Material.LADDER || feet == Material.VINE) return true;
         if (Compat.isOneOf(feet, "ICE", "PACKED_ICE", "BLUE_ICE")) return true;
         if (Compat.isOneOf(feet, "SLIME_BLOCK", "HONEY_BLOCK")) return true;

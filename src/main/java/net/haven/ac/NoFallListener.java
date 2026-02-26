@@ -74,8 +74,8 @@ public final class NoFallListener implements Listener {
         if (p.isInsideVehicle()) return true;
         if (p.isDead()) return true;
 
-        if (p.hasPotionEffect(PotionEffectType.SLOW_FALLING)) return true;
-        if (p.hasPotionEffect(PotionEffectType.LEVITATION)) return true;
+        if (p.hasPotionEffect(Compat.potionType("SLOW_FALLING"))) return true;
+        if (p.hasPotionEffect(Compat.potionType("LEVITATION"))) return true;
 
         return false;
     }
@@ -86,14 +86,14 @@ public final class NoFallListener implements Listener {
 
         if (feet == Material.WATER || head == Material.WATER) return true;
         if (feet == Material.LAVA || head == Material.LAVA) return true;
-        if (feet == Material.COBWEB) return true;
+        if (feet == Compat.material("COBWEB","WEB")) return true;
         if (feet == Material.LADDER || feet == Material.VINE) return true;
 
         return false;
     }
 
     private int jumpBoostLevel(Player p) {
-        PotionEffect jb = p.getPotionEffect(PotionEffectType.JUMP);
+        PotionEffect jb = Compat.getPotionEffect(p, PotionEffectType.JUMP);
         if (jb == null) return 0;
         return Math.max(0, jb.getAmplifier() + 1);
     }
