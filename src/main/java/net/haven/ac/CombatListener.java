@@ -14,7 +14,10 @@ import org.bukkit.util.Vector;
 
 import java.text.DecimalFormat;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Deque;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -62,6 +65,13 @@ public final class CombatListener implements Listener {
     private final double auraSmoothMinAvgPitchDeg;
     private final double auraSmoothVlAdd;
 
+    // Rotation step quantization (GCD-like)
+    private final boolean auraGcdEnabled;
+    private final int auraGcdMinSamples;
+    private final double auraGcdMinStepDeg;
+    private final double auraGcdMaxNormRemainder;
+    private final double auraGcdVlAdd;
+
     private final PunishAction punishAction;
     private final double punishThreshold;
     private final boolean setbackOnFlag;
@@ -106,6 +116,12 @@ public final class CombatListener implements Listener {
         this.auraSmoothMinAvgYawDeg = cfg.getDouble("checks.killaura.smooth_rotation.min_avg_yaw_delta_deg", 1.80);
         this.auraSmoothMinAvgPitchDeg = cfg.getDouble("checks.killaura.smooth_rotation.min_avg_pitch_delta_deg", 0.25);
         this.auraSmoothVlAdd = cfg.getDouble("checks.killaura.smooth_rotation.vl_add", 1.0);
+
+        this.auraGcdEnabled = cfg.getBoolean("checks.killaura.smooth_rotation.gcd.enabled", true);
+        this.auraGcdMinSamples = cfg.getInt("checks.killaura.smooth_rotation.gcd.min_samples", 7);
+        this.auraGcdMinStepDeg = cfg.getDouble("checks.killaura.smooth_rotation.gcd.min_step_deg", 0.06);
+        this.auraGcdMaxNormRemainder = cfg.getDouble("checks.killaura.smooth_rotation.gcd.max_norm_remainder", 0.12);
+        this.auraGcdVlAdd = cfg.getDouble("checks.killaura.smooth_rotation.gcd.vl_add", 0.8);
 
         this.punishAction = PunishAction.fromString(cfg.getString("punishments.action", "SETBACK"));
         this.punishThreshold = cfg.getDouble("punishments.threshold_vl", 6.0);
@@ -175,10 +191,15 @@ public final class CombatListener implements Listener {
             }
 
             boolean suspiciousSmooth = false;
+            boolean suspiciousGcd = false;
             double yawStd = 999.0;
             double pitchStd = 999.0;
             double yawAvg = 0.0;
             double pitchAvg = 0.0;
+            double gcdYawStep = 0.0;
+            double gcdPitchStep = 0.0;
+            double gcdYawRem = 1.0;
+            double gcdPitchRem = 1.0;
             if (auraSmoothEnabled) {
                 float yawNow = normalizeYaw(eye.getYaw());
                 float pitchNow = eye.getPitch();
@@ -200,13 +221,28 @@ public final class CombatListener implements Listener {
                         boolean enoughMovement = yawAvg >= auraSmoothMinAvgYawDeg || pitchAvg >= auraSmoothMinAvgPitchDeg;
                         suspiciousSmooth = veryStable && enoughMovement;
                     }
+
+                    if (auraGcdEnabled && st.rotDeltas.size() >= auraGcdMinSamples && suspiciousSmooth) {
+                        gcdYawStep = estimateStep(st.rotDeltas, true, auraGcdMinStepDeg);
+                        gcdPitchStep = estimateStep(st.rotDeltas, false, auraGcdMinStepDeg);
+                        if (gcdYawStep >= auraGcdMinStepDeg) {
+                            gcdYawRem = normalizedRemainder(st.rotDeltas, true, gcdYawStep);
+                        }
+                        if (gcdPitchStep >= auraGcdMinStepDeg) {
+                            gcdPitchRem = normalizedRemainder(st.rotDeltas, false, gcdPitchStep);
+                        }
+
+                        boolean yawQuant = gcdYawStep >= auraGcdMinStepDeg && gcdYawRem <= auraGcdMaxNormRemainder;
+                        boolean pitchQuant = gcdPitchStep >= auraGcdMinStepDeg && gcdPitchRem <= auraGcdMaxNormRemainder;
+                        suspiciousGcd = yawQuant || pitchQuant;
+                    }
                 }
                 st.lastYaw = yawNow;
                 st.lastPitch = pitchNow;
                 st.hasLastRot = true;
             }
 
-            if (suspiciousAngle || suspiciousSwitch || suspiciousLos || suspiciousSmooth) {
+            if (suspiciousAngle || suspiciousSwitch || suspiciousLos || suspiciousSmooth || suspiciousGcd) {
                 auraFlag = true;
                 StringBuilder details = new StringBuilder();
                 if (suspiciousAngle) {
@@ -230,6 +266,14 @@ public final class CombatListener implements Listener {
                     if (!suspiciousAngle && !suspiciousSwitch && !suspiciousLos) {
                         auraBaseAdd = auraSmoothVlAdd;
                     }
+                }
+                if (suspiciousGcd) {
+                    if (details.length() > 0) details.append(", ");
+                    details.append("gcd(yStep=").append(DF2.format(gcdYawStep))
+                            .append(",pStep=").append(DF2.format(gcdPitchStep))
+                            .append(",yRem=").append(DF2.format(gcdYawRem))
+                            .append(",pRem=").append(DF2.format(gcdPitchRem)).append(")");
+                    auraBaseAdd += auraGcdVlAdd;
                 }
 
                 auraDetail = details.toString();
@@ -341,6 +385,35 @@ public final class CombatListener implements Listener {
         }
         if (n <= 1) return 9999.0;
         return Math.sqrt(ss / (n - 1));
+    }
+
+    private static double estimateStep(Deque<RotDelta> samples, boolean yaw, double minStep) {
+        List<Double> vals = new ArrayList<Double>();
+        for (RotDelta s : samples) {
+            double v = yaw ? s.yawDelta : s.pitchDelta;
+            if (v >= minStep) vals.add(v);
+        }
+        if (vals.size() < 3) return 0.0;
+        Collections.sort(vals);
+        int idx = (int) Math.floor((vals.size() - 1) * 0.2);
+        return vals.get(Math.max(0, idx));
+    }
+
+    private static double normalizedRemainder(Deque<RotDelta> samples, boolean yaw, double step) {
+        if (step <= 0.0) return 1.0;
+        double sum = 0.0;
+        int n = 0;
+        for (RotDelta s : samples) {
+            double v = yaw ? s.yawDelta : s.pitchDelta;
+            if (v < step) continue;
+            double mul = Math.round(v / step);
+            if (mul <= 0.0) continue;
+            double rem = Math.abs(v - (mul * step));
+            sum += Math.min(1.0, rem / step);
+            n++;
+        }
+        if (n <= 0) return 1.0;
+        return sum / n;
     }
 
     private static final class AuraState {

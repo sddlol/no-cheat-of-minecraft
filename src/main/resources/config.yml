@@ -85,6 +85,14 @@ checks:
       min_avg_pitch_delta_deg: 0.25
       vl_add: 1.0
 
+      # GCD-like fixed-step rotation pattern (common in some aim-assist logic)
+      gcd:
+        enabled: true
+        min_samples: 7
+        min_step_deg: 0.06
+        max_norm_remainder: 0.12
+        vl_add: 0.8
+
   autoclicker:
     enabled: true
     window_ms: 1000
