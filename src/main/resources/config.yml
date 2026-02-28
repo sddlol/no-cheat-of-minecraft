@@ -170,14 +170,17 @@ checks:
     min_samples: 4
     min_move_ms: 25
     max_move_ms: 220
-    # Per-item thresholds + buffer (continuous violation required)
-    sword_max_use_item_bps: 2.15
-    food_max_use_item_bps: 2.25
-    potion_max_use_item_bps: 2.30
+    # Grim-like: predict no-item movement first, then apply use-item multipliers.
+    sword_use_mult: 0.35
+    food_use_mult: 0.20
+    potion_use_mult: 0.20
+    # Offset tolerance above predicted use-item speed.
+    base_offset_bps: 0.20
+    peak_offset_bps: 0.38
+    # Per-item buffer (continuous offset required)
     sword_buffer_min: 2.0
     food_buffer_min: 1.5
     potion_buffer_min: 1.5
-    grace_bps: 0.25
     vl_add: 1.4
 
 

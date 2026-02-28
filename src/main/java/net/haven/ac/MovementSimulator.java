@@ -74,6 +74,14 @@ public final class MovementSimulator {
     }
 
     public static double allowedHorizontalBps(Player p, boolean onGround, boolean sprinting, boolean sneaking, Config cfg) {
+        return allowedHorizontalBpsInternal(p, onGround, sprinting, sneaking, cfg, true);
+    }
+
+    public static double allowedHorizontalBpsNoItemSlow(Player p, boolean onGround, boolean sprinting, boolean sneaking, Config cfg) {
+        return allowedHorizontalBpsInternal(p, onGround, sprinting, sneaking, cfg, false);
+    }
+
+    private static double allowedHorizontalBpsInternal(Player p, boolean onGround, boolean sprinting, boolean sneaking, Config cfg, boolean applyUseItemSlow) {
         if (shouldSkip(p)) return Double.POSITIVE_INFINITY;
 
         // 1.9+ has Attribute API; 1.8 doesn't. Use reflection.
@@ -94,7 +102,7 @@ public final class MovementSimulator {
 
         if (sprinting) bps *= cfg.sprintMult;
         if (sneaking) bps *= cfg.sneakMult;
-        if (isUsingSlowItem(p)) bps *= cfg.useItemMult;
+        if (applyUseItemSlow && isUsingSlowItem(p)) bps *= cfg.useItemMult;
 
         int speedLv = getPotionLevel(p, "SPEED");
         if (speedLv > 0) {

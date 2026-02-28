@@ -16,6 +16,12 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Grim-like lightweight NoSlow:
+ * - predict allowed horizontal speed from simplified vanilla movement model
+ * - derive expected speed while using item (no-item prediction * item-use multiplier)
+ * - use offset buffer instead of single-tick threshold
+ */
 public final class NoSlowListener implements Listener {
 
     private final AntiCheatLitePlugin plugin;
@@ -35,15 +41,18 @@ public final class NoSlowListener implements Listener {
     private final int minMoveMs;
     private final int maxMoveMs;
 
-    private final double swordMaxUseItemBps;
-    private final double foodMaxUseItemBps;
-    private final double potionMaxUseItemBps;
-    private final double graceBps;
+    private final double swordUseMult;
+    private final double foodUseMult;
+    private final double potionUseMult;
+    private final double baseOffsetBps;
+    private final double peakOffsetBps;
     private final double vlAdd;
 
     private final double swordBufferMin;
     private final double foodBufferMin;
     private final double potionBufferMin;
+
+    private final MovementSimulator.Config simCfg = new MovementSimulator.Config();
 
     private final Map<UUID, State> states = new ConcurrentHashMap<>();
 
@@ -67,21 +76,30 @@ public final class NoSlowListener implements Listener {
         this.minMoveMs = cfg.getInt("checks.noslow.min_move_ms", 25);
         this.maxMoveMs = cfg.getInt("checks.noslow.max_move_ms", 220);
 
-        double fallbackMax = cfg.getDouble("checks.noslow.max_use_item_bps", 2.25);
-        this.swordMaxUseItemBps = cfg.getDouble("checks.noslow.sword_max_use_item_bps", fallbackMax);
-        this.foodMaxUseItemBps = cfg.getDouble("checks.noslow.food_max_use_item_bps", fallbackMax);
-        this.potionMaxUseItemBps = cfg.getDouble("checks.noslow.potion_max_use_item_bps", fallbackMax);
-        this.graceBps = cfg.getDouble("checks.noslow.grace_bps", 0.25);
+        this.swordUseMult = cfg.getDouble("checks.noslow.sword_use_mult", 0.35);
+        this.foodUseMult = cfg.getDouble("checks.noslow.food_use_mult", 0.20);
+        this.potionUseMult = cfg.getDouble("checks.noslow.potion_use_mult", 0.20);
+        this.baseOffsetBps = cfg.getDouble("checks.noslow.base_offset_bps", 0.20);
+        this.peakOffsetBps = cfg.getDouble("checks.noslow.peak_offset_bps", 0.38);
         this.vlAdd = cfg.getDouble("checks.noslow.vl_add", 1.4);
 
         this.swordBufferMin = cfg.getDouble("checks.noslow.sword_buffer_min", 2.0);
         this.foodBufferMin = cfg.getDouble("checks.noslow.food_buffer_min", 1.5);
         this.potionBufferMin = cfg.getDouble("checks.noslow.potion_buffer_min", 1.5);
+
+        // Keep simulation consistent with movement_sim tuneables.
+        simCfg.speedAttrToBps = cfg.getDouble("movement_sim.speed_attr_to_bps", 43.17);
+        simCfg.sprintMult = cfg.getDouble("movement_sim.sprint_mult", 1.30);
+        simCfg.sneakMult = cfg.getDouble("movement_sim.sneak_mult", 0.30);
+        simCfg.airMult = cfg.getDouble("movement_sim.air_mult", 1.08);
+        simCfg.headHitAirMult = cfg.getDouble("movement_sim.head_hit_air_mult", 1.15);
+        simCfg.speedPotionPerLevel = cfg.getDouble("movement_sim.speed_potion_per_level", 0.20);
+        simCfg.specialEnvLooseMult = cfg.getDouble("movement_sim.special_env_loose_mult", 1.35);
+        simCfg.baseSlackBps = cfg.getDouble("movement_sim.base_slack_bps", 0.75);
     }
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
     public void onConsume(PlayerItemConsumeEvent e) {
-        // small cooldown window around consume animation
         State st = states.computeIfAbsent(e.getPlayer().getUniqueId(), k -> new State(e.getPlayer().getLocation().clone(), System.currentTimeMillis()));
         st.consumeGraceUntil = System.currentTimeMillis() + 300L;
     }
@@ -124,11 +142,16 @@ public final class NoSlowListener implements Listener {
         boolean inConsumeGrace = now <= st.consumeGraceUntil;
 
         if (itemUsing && !inConsumeGrace && st.samplesSize() >= minSamples) {
+            // Predict "normal" allowed movement first, then apply item-use slowdown multiplier.
+            double normalAllowed = MovementSimulator.allowedHorizontalBpsNoItemSlow(p, p.isOnGround(), p.isSprinting(), p.isSneaking(), simCfg);
+            double expectedUseAllowed = normalAllowed * itemUseMult(group);
+
             double avg = st.avg();
             double peak = st.peak();
-            double limit = itemLimit(group) + graceBps;
+            double avgOffset = avg - expectedUseAllowed;
+            double peakOffset = peak - expectedUseAllowed;
 
-            if (avg > limit || peak > limit + 0.35) {
+            if (avgOffset > baseOffsetBps || peakOffset > peakOffsetBps) {
                 st.addBuffer(group, 1.0);
             } else {
                 st.decayBuffer(group, 0.2);
@@ -139,7 +162,9 @@ public final class NoSlowListener implements Listener {
                 alert(p, "NOSLOW", next,
                         "avg=" + DF2.format(avg) +
                                 ", peak=" + DF2.format(peak) +
-                                ", limit=" + DF2.format(limit) +
+                                ", expect=" + DF2.format(expectedUseAllowed) +
+                                ", offA=" + DF2.format(avgOffset) +
+                                ", offP=" + DF2.format(peakOffset) +
                                 ", item=" + group.name().toLowerCase() +
                                 ", buf=" + DF2.format(st.getBuffer(group)));
             }
@@ -174,12 +199,12 @@ public final class NoSlowListener implements Listener {
         return ItemGroup.NONE;
     }
 
-    private double itemLimit(ItemGroup group) {
+    private double itemUseMult(ItemGroup group) {
         switch (group) {
-            case SWORD: return swordMaxUseItemBps;
-            case FOOD: return foodMaxUseItemBps;
-            case POTION: return potionMaxUseItemBps;
-            default: return Double.MAX_VALUE;
+            case SWORD: return swordUseMult;
+            case FOOD: return foodUseMult;
+            case POTION: return potionUseMult;
+            default: return 1.0;
         }
     }
 
@@ -194,7 +219,6 @@ public final class NoSlowListener implements Listener {
 
     private boolean isFoodLike(Material m) {
         String n = m.name();
-        // cross-version conservative list
         return n.contains("APPLE") || n.equals("BREAD") || n.equals("COOKED_BEEF") || n.equals("COOKED_CHICKEN")
                 || n.equals("COOKED_MUTTON") || n.equals("COOKED_RABBIT") || n.equals("COOKED_PORKCHOP")
                 || n.equals("CARROT") || n.equals("POTATO") || n.equals("BAKED_POTATO") || n.equals("BEETROOT")
@@ -234,9 +258,6 @@ public final class NoSlowListener implements Listener {
             this.lastLoc = l;
             this.lastMoveAt = t;
             this.consumeGraceUntil = 0L;
-            this.swordBuffer = 0.0;
-            this.foodBuffer = 0.0;
-            this.potionBuffer = 0.0;
         }
 
         private void addSample(long now, double bps, int windowMs) {
