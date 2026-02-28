@@ -274,14 +274,6 @@ movement_sim:
   peak_violation_add: 2.5
 
 
-nofall:
-  enabled: true
-  window_ms: 300
-  # If true, applies Feather Falling reduction (12% per level). Otherwise, we call player.damage(raw) and let vanilla handle armor/enchant.
-  use_feather_falling_formula: false
-  debug: false
-
-
 # Setback tuning ("sticky" teleport) to fight fast fly/blink drift.
 setback:
   # After a setback, block movement for N ticks (rotation still allowed).
@@ -304,4 +296,6 @@ blink:
 nofall:
   enabled: true
   window_ms: 300
+  # If true, applies Feather Falling reduction (12% per level). Otherwise, we call player.damage(raw) and let vanilla handle armor/enchant.
   use_feather_falling_formula: false
+  debug: false
