@@ -114,32 +114,32 @@ private final boolean flyEnabled;
         this.speedGraceBps = cfg.getDouble("checks.speed.grace_bps", 0.45);
         this.speedPeakSlackBps = cfg.getDouble("checks.speed.peak_slack_bps", 1.2);
 
-        // Movement simulation config
-        this.simEnabled = cfg.getBoolean("checks.movement_sim.enabled", true);
-        this.simIgnoreAfterVelocityMs = cfg.getLong("checks.movement_sim.ignore_after_velocity_ms", 1200L);
-        this.simVlAdd = cfg.getDouble("checks.movement_sim.vl_add", 1.0);
+        // Movement simulation config (prefer checks.movement_sim.*, fallback to legacy movement_sim.*)
+        this.simEnabled = getBooleanCompat(cfg, "checks.movement_sim.enabled", "movement_sim.enabled", true);
+        this.simIgnoreAfterVelocityMs = getLongCompat(cfg, "checks.movement_sim.ignore_after_velocity_ms", "movement_sim.ignore_after_velocity_ms", 1200L);
+        this.simVlAdd = getDoubleCompat(cfg, "checks.movement_sim.vl_add", "movement_sim.violation_add", 1.0);
 
-        this.simSampleWindowMs = cfg.getInt("checks.movement_sim.sample_window_ms", 550);
-        this.simMinSamples = cfg.getInt("checks.movement_sim.min_samples", 6);
-        this.simMinMoveMs = cfg.getInt("checks.movement_sim.min_move_ms", 20);
-        this.simMaxMoveMs = cfg.getInt("checks.movement_sim.max_move_ms", 220);
-        this.simGraceBps = cfg.getDouble("checks.movement_sim.grace_bps", 0.75);
-        this.simPeakSlackBps = cfg.getDouble("checks.movement_sim.peak_slack_bps", 1.25);
+        this.simSampleWindowMs = getIntCompat(cfg, "checks.movement_sim.sample_window_ms", "movement_sim.sample_window_ms", 550);
+        this.simMinSamples = getIntCompat(cfg, "checks.movement_sim.min_samples", "movement_sim.min_samples", 6);
+        this.simMinMoveMs = getIntCompat(cfg, "checks.movement_sim.min_move_ms", "movement_sim.min_dt_ms", 20);
+        this.simMaxMoveMs = getIntCompat(cfg, "checks.movement_sim.max_move_ms", "movement_sim.max_dt_ms", 220);
+        this.simGraceBps = getDoubleCompat(cfg, "checks.movement_sim.grace_bps", "movement_sim.base_slack_bps", 0.75);
+        this.simPeakSlackBps = getDoubleCompat(cfg, "checks.movement_sim.peak_slack_bps", "movement_sim.peak_slack_bps", 1.25);
 
-        this.simSpeedAttrToBps = cfg.getDouble("checks.movement_sim.speed_attr_to_bps", 43.17);
-        this.simSprintMult = cfg.getDouble("checks.movement_sim.sprint_mult", 1.30);
-        this.simSneakMult = cfg.getDouble("checks.movement_sim.sneak_mult", 0.30);
-        this.simAirMult = cfg.getDouble("checks.movement_sim.air_mult", 1.08);
-        this.simHeadHitAirMult = cfg.getDouble("checks.movement_sim.head_hit_air_mult", 1.15);
-        this.simSpeedPotionPerLevel = cfg.getDouble("checks.movement_sim.speed_potion_per_level", 0.20);
-        this.simSpecialEnvLooseMult = cfg.getDouble("checks.movement_sim.special_env_loose_mult", 1.35);
-        this.simBaseSlackBps = cfg.getDouble("checks.movement_sim.base_slack_bps", 0.75);
+        this.simSpeedAttrToBps = getDoubleCompat(cfg, "checks.movement_sim.speed_attr_to_bps", "movement_sim.speed_attr_to_bps", 43.17);
+        this.simSprintMult = getDoubleCompat(cfg, "checks.movement_sim.sprint_mult", "movement_sim.sprint_mult", 1.30);
+        this.simSneakMult = getDoubleCompat(cfg, "checks.movement_sim.sneak_mult", "movement_sim.sneak_mult", 0.30);
+        this.simAirMult = getDoubleCompat(cfg, "checks.movement_sim.air_mult", "movement_sim.air_mult", 1.08);
+        this.simHeadHitAirMult = getDoubleCompat(cfg, "checks.movement_sim.head_hit_air_mult", "movement_sim.head_hit_air_mult", 1.15);
+        this.simSpeedPotionPerLevel = getDoubleCompat(cfg, "checks.movement_sim.speed_potion_per_level", "movement_sim.speed_potion_per_level", 0.20);
+        this.simSpecialEnvLooseMult = getDoubleCompat(cfg, "checks.movement_sim.special_env_loose_mult", "movement_sim.special_env_loose_mult", 1.35);
+        this.simBaseSlackBps = getDoubleCompat(cfg, "checks.movement_sim.base_slack_bps", "movement_sim.base_slack_bps", 0.75);
 
-        this.blinkEnabled = cfg.getBoolean("checks.blink.enabled", true);
-this.blinkMaxDistance = cfg.getDouble("checks.blink.max_teleport_distance", 20.0);
-this.blinkPunishDamage = cfg.getDouble("checks.blink.punish_damage", 2.0);
-this.blinkVlAdd = cfg.getDouble("checks.blink.vl_add", 2.0);
-this.blinkIgnoreAfterVelocityMs = cfg.getLong("checks.blink.ignore_after_velocity_ms", 1200L);
+        this.blinkEnabled = getBooleanCompat(cfg, "checks.blink.enabled", "blink.enabled", true);
+        this.blinkMaxDistance = getDoubleCompat(cfg, "checks.blink.max_teleport_distance", "blink.max_teleport_distance", 20.0);
+        this.blinkPunishDamage = getDoubleCompat(cfg, "checks.blink.punish_damage", "blink.punish_damage", 2.0);
+        this.blinkVlAdd = getDoubleCompat(cfg, "checks.blink.vl_add", "blink.vl_add", 2.0);
+        this.blinkIgnoreAfterVelocityMs = getLongCompat(cfg, "checks.blink.ignore_after_velocity_ms", "blink.ignore_after_velocity_ms", 1200L);
 
 this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
 
@@ -349,10 +349,12 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
             if (isFlyExempt(p)) {
                 st.airTicks = 0;
                 st.hoverTicks = 0;
+                st.flyBuffer = 0.0;
                 st.hasVy = false;
             } else if (p.isOnGround()) {
                 st.airTicks = 0;
                 st.hoverTicks = 0;
+                st.flyBuffer = 0.0;
                 st.vy = 0.0;
                 st.hasVy = true;
             } else {
@@ -381,17 +383,25 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
                 // Keep the old "small dy" heuristic as a weaker signal, but only after some air ticks.
                 boolean badSmallDy = st.airTicks >= flyMinAirTicks && Math.abs(dy) <= flyMaxAbsYDelta;
 
-                if (!isInWeirdBlock(p) && (badHover || badPhysics || badSmallDy)) {
-                    double next = vl.addVl(p.getUniqueId(), CheckType.FLY, flyVlAdd);
-                    alert(p, "FLY", next,
-                            "airTicks=" + st.airTicks +
-                                    ", dy=" + DF2.format(dy) +
-                                    ", exp=" + DF2.format(expectedDy) +
-                                    ", diff=" + DF2.format(diff) +
-                                    (recentVelocity ? ", vel" : "") +
-                                    (badHover ? ", hover" : "") +
-                                    (badPhysics ? ", phys" : ""));
-                    flaggedThisMove = true;
+                boolean suspiciousFly = !isInWeirdBlock(p) && (badHover || badPhysics || badSmallDy);
+                if (suspiciousFly) {
+                    // Grim-like buffering: require sustained bad air movement before VL.
+                    st.flyBuffer = Math.min(4.0, st.flyBuffer + 1.0);
+                    if (st.flyBuffer >= 2.0) {
+                        double next = vl.addVl(p.getUniqueId(), CheckType.FLY, flyVlAdd);
+                        alert(p, "FLY", next,
+                                "airTicks=" + st.airTicks +
+                                        ", dy=" + DF2.format(dy) +
+                                        ", exp=" + DF2.format(expectedDy) +
+                                        ", diff=" + DF2.format(diff) +
+                                        ", buf=" + DF2.format(st.flyBuffer) +
+                                        (recentVelocity ? ", vel" : "") +
+                                        (badHover ? ", hover" : "") +
+                                        (badPhysics ? ", phys" : ""));
+                        flaggedThisMove = true;
+                    }
+                } else {
+                    st.flyBuffer = Math.max(0.0, st.flyBuffer - 0.25);
                 }
 
                 st.vy = predictedNextVy;
@@ -468,12 +478,41 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
         return false;
     }
 
+    private static boolean hasPath(FileConfiguration cfg, String path) {
+        return cfg != null && path != null && cfg.contains(path);
+    }
+
+    private static boolean getBooleanCompat(FileConfiguration cfg, String preferred, String legacy, boolean def) {
+        if (hasPath(cfg, preferred)) return cfg.getBoolean(preferred);
+        if (hasPath(cfg, legacy)) return cfg.getBoolean(legacy);
+        return def;
+    }
+
+    private static int getIntCompat(FileConfiguration cfg, String preferred, String legacy, int def) {
+        if (hasPath(cfg, preferred)) return cfg.getInt(preferred);
+        if (hasPath(cfg, legacy)) return cfg.getInt(legacy);
+        return def;
+    }
+
+    private static long getLongCompat(FileConfiguration cfg, String preferred, String legacy, long def) {
+        if (hasPath(cfg, preferred)) return cfg.getLong(preferred);
+        if (hasPath(cfg, legacy)) return cfg.getLong(legacy);
+        return def;
+    }
+
+    private static double getDoubleCompat(FileConfiguration cfg, String preferred, String legacy, double def) {
+        if (hasPath(cfg, preferred)) return cfg.getDouble(preferred);
+        if (hasPath(cfg, legacy)) return cfg.getDouble(legacy);
+        return def;
+    }
+
     private static final class MoveState {
         private Location lastLoc;
         private long lastMoveAt;
         private long lastVelocityAt;
         private int airTicks;
         private int hoverTicks;
+        private double flyBuffer;
 
         private double vy;
         private boolean hasVy;
@@ -491,6 +530,7 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
             this.lastVelocityAt = 0L;
             this.airTicks = 0;
             this.hoverTicks = 0;
+            this.flyBuffer = 0.0;
             this.vy = 0.0;
             this.hasVy = false;
             this.lastYaw = lastLoc.getYaw();

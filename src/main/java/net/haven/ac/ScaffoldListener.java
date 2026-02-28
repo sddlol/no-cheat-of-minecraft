@@ -66,7 +66,9 @@ public final class ScaffoldListener implements Listener {
         this.bypassPermission = cfg.getString("bypass_permission", "anticheatlite.bypass");
 
         this.enabled = cfg.getBoolean("checks.scaffold.enabled", true);
-        this.scaffoldPunishDamage = cfg.getDouble("checks.scaffold.punish_damage", 2.0);
+        this.scaffoldPunishDamage = cfg.contains("checks.scaffold.annoy_damage")
+                ? cfg.getDouble("checks.scaffold.annoy_damage", 2.0)
+                : cfg.getDouble("checks.scaffold.punish_damage", 2.0);
         this.scaffoldBreakLastBlock = cfg.getBoolean("checks.scaffold.break_last_block", true);
         this.windowMs = cfg.getInt("checks.scaffold.window_ms", 1200);
         this.minPlaces = cfg.getInt("checks.scaffold.min_places", 6);
