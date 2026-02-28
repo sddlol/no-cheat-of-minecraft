@@ -8,5 +8,6 @@ public enum CheckType {
     AUTOCLICKER,
     SCAFFOLD,
     MOVEMENT_SIM,
-    NOFALL
+    NOFALL,
+    XRAY
 }

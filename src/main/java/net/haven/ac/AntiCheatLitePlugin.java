@@ -28,6 +28,7 @@ public final class AntiCheatLitePlugin extends JavaPlugin {
     private ClickListener clickListener;
     private ScaffoldListener scaffoldListener;
     private NoFallListener noFallListener;
+    private XRayListener xRayListener;
 
     // Last known "safe" location (usually last on-ground spot). Used for setbacks.
     private final Map<UUID, Location> lastSafe = new ConcurrentHashMap<>();
@@ -100,6 +101,12 @@ public final class AntiCheatLitePlugin extends JavaPlugin {
         }
         noFallListener = new NoFallListener(this, violationManager, cfg);
         Bukkit.getPluginManager().registerEvents(noFallListener, this);
+
+        if (xRayListener != null) {
+            org.bukkit.event.HandlerList.unregisterAll(xRayListener);
+        }
+        xRayListener = new XRayListener(this, violationManager, cfg);
+        Bukkit.getPluginManager().registerEvents(xRayListener, this);
     }
 
     /** Update safe location for setbacks. */
@@ -159,7 +166,8 @@ public final class AntiCheatLitePlugin extends JavaPlugin {
                     " reach=" + violationManager.getVl(id, CheckType.REACH) +
                     " aura=" + violationManager.getVl(id, CheckType.KILLAURA) +
                     " click=" + violationManager.getVl(id, CheckType.AUTOCLICKER) +
-                    " scaffold=" + violationManager.getVl(id, CheckType.SCAFFOLD)));
+                    " scaffold=" + violationManager.getVl(id, CheckType.SCAFFOLD) +
+                    " xray=" + violationManager.getVl(id, CheckType.XRAY)));
             return true;
         }
 

@@ -98,6 +98,22 @@ checks:
     # "Annoy" damage dealt to the player when flagged (2.0 = 1 heart).
     annoy_damage: 2.0
 
+  xray:
+    enabled: true
+    # Only count underground mining below this Y as xray signal.
+    max_y: 48
+    # Sliding window for ratio statistics.
+    window_ms: 300000
+    # Need enough mining samples before ratio can flag.
+    min_underground_breaks: 45
+    min_hidden_ores: 12
+    # hidden_ores / underground_breaks ratio threshold.
+    max_hidden_ore_ratio: 0.28
+    # Extra burst detector for diamond ore.
+    diamond_window_ms: 60000
+    max_diamond_ore_per_window: 5
+    vl_add: 2.5
+
 
 movement_sim:
   enabled: true
