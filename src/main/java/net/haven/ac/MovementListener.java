@@ -84,6 +84,7 @@ private final boolean flyEnabled;
     private final int flyMinAirTicks;
     private final double flyMaxAbsYDelta;
     private final double flyVlAdd;
+    private final long flyIgnoreAfterLiquidMs;
 
     private final PunishAction punishAction;
     private final double punishThreshold;
@@ -152,6 +153,7 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
         this.flyMinAirTicks = cfg.getInt("checks.fly.min_air_ticks", 14);
         this.flyMaxAbsYDelta = cfg.getDouble("checks.fly.max_abs_y_delta_per_tick", 0.02);
         this.flyVlAdd = cfg.getDouble("checks.fly.vl_add", 1.5);
+        this.flyIgnoreAfterLiquidMs = cfg.getLong("checks.fly.ignore_after_liquid_ms", 1500L);
 
         this.punishAction = PunishAction.fromString(cfg.getString("punishments.action", "SETBACK"));
         this.punishThreshold = cfg.getDouble("punishments.threshold_vl", 6.0);
@@ -239,6 +241,9 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
 
         long dtMs = Math.max(1L, now - st.lastMoveAt);
 
+        if (isInLiquid(p)) {
+            st.lastLiquidAt = now;
+        }
 
         // BLINK: sudden large move (anti-blink). If moved too far, rollback + punish.
         if (blinkEnabled) {
@@ -397,7 +402,8 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
                 // Keep the old "small dy" heuristic as a weaker signal, but only after some air ticks.
                 boolean badSmallDy = st.airTicks >= flyMinAirTicks && Math.abs(dy) <= flyMaxAbsYDelta;
 
-                boolean suspiciousFly = !isInWeirdBlock(p) && (badHover || badPhysics || badSmallDy);
+                boolean recentLiquid = (now - st.lastLiquidAt) <= flyIgnoreAfterLiquidMs;
+                boolean suspiciousFly = !isInWeirdBlock(p) && !recentLiquid && (badHover || badPhysics || badSmallDy);
                 if (suspiciousFly) {
                     // Grim-like buffering: require sustained bad air movement before VL.
                     st.flyBuffer = Math.min(4.0, st.flyBuffer + 1.0);
@@ -480,6 +486,13 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
         plugin.getLogger().info("[AC] " + suspected.getName() + " " + check + " VL=" + DF2.format(checkVl) + " (" + details + ")");
     }
 
+    private boolean isInLiquid(Player p) {
+        Location loc = p.getLocation();
+        Material feet = loc.getBlock().getType();
+        Material head = loc.clone().add(0, 1, 0).getBlock().getType();
+        return feet == Material.WATER || feet == Material.LAVA || head == Material.WATER || head == Material.LAVA;
+    }
+
     private boolean isInWeirdBlock(Player p) {
         Location loc = p.getLocation();
         Material feet = loc.getBlock().getType();
@@ -551,6 +564,7 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
         private int airTicks;
         private int hoverTicks;
         private double flyBuffer;
+        private long lastLiquidAt;
 
         private double vy;
         private boolean hasVy;
@@ -569,6 +583,7 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
             this.airTicks = 0;
             this.hoverTicks = 0;
             this.flyBuffer = 0.0;
+            this.lastLiquidAt = 0L;
             this.vy = 0.0;
             this.hasVy = false;
             this.lastYaw = lastLoc.getYaw();
