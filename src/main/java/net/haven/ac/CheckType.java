@@ -14,5 +14,6 @@ public enum CheckType {
     VELOCITY,
     BADPACKETS,
     TIMER,
-    INVMOVE
+    INVMOVE,
+    CLICKTP
 }

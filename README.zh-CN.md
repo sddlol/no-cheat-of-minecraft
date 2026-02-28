@@ -13,7 +13,7 @@
 - ✅ 跨版本支持：**Minecraft 1.8.x ~ 1.21.x**
 - ✅ 单 Jar 部署
 - ✅ 核心检测：
-  - 移动：Speed / Fly / Movement Sim / Blink / NoFall / Velocity / Timer / InvMove
+  - 移动：Speed / Fly / Movement Sim / Blink / NoFall / Velocity / Timer / InvMove / ClickTP
   - 战斗：Reach / KillAura / AutoClicker / NoSlow
   - 协议健全性：BadPackets
   - 搭路：Scaffold
@@ -116,6 +116,7 @@
 - `checks.velocity.*`
 - `checks.timer.*`
 - `checks.invmove.*`
+- `checks.clicktp.*`
 - `checks.scaffold.prediction.*`
 - `checks.xray.*`
 - `checks.vl_reset_guard.*`
@@ -143,8 +144,8 @@ target/*.jar
 ## 发布（Tag）
 
 ```bash
-git tag -a v1.10.3 -m "Release v1.10.3"
-git push origin v1.10.3
+git tag -a v1.10.4 -m "Release v1.10.4"
+git push origin v1.10.4
 ```
 
 ---

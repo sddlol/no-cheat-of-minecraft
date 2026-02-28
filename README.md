@@ -13,7 +13,7 @@ Current direction: keep **1.8.x ~ 1.21.x** compatibility while moving more check
 - ✅ Cross-version support: **Minecraft 1.8.x ~ 1.21.x**
 - ✅ Single jar deployment
 - ✅ Core checks:
-  - Movement: Speed / Fly / Movement Sim / Blink / NoFall / Velocity / Timer / InvMove
+  - Movement: Speed / Fly / Movement Sim / Blink / NoFall / Velocity / Timer / InvMove / ClickTP
   - Combat: Reach / KillAura / AutoClicker / NoSlow
   - Packet sanity: BadPackets
   - Build: Scaffold
@@ -116,6 +116,7 @@ Focus sections:
 - `checks.velocity.*`
 - `checks.timer.*`
 - `checks.invmove.*`
+- `checks.clicktp.*`
 - `checks.scaffold.prediction.*`
 - `checks.xray.*`
 - `checks.vl_reset_guard.*`
@@ -143,8 +144,8 @@ target/*.jar
 ## Release (Tag)
 
 ```bash
-git tag -a v1.10.3 -m "Release v1.10.3"
-git push origin v1.10.3
+git tag -a v1.10.4 -m "Release v1.10.4"
+git push origin v1.10.4
 ```
 
 ---

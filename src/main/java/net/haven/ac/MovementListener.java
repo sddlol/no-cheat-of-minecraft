@@ -12,6 +12,8 @@ import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerRespawnEvent;
+import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.event.player.PlayerVelocityEvent;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
@@ -85,6 +87,13 @@ private final boolean flyEnabled;
     private final double flyMaxAbsYDelta;
     private final double flyVlAdd;
     private final long flyIgnoreAfterLiquidMs;
+    private final long flyIgnoreAfterDamageMs;
+    private final int flyLongAirTicks;
+
+    private final boolean clickTpEnabled;
+    private final double clickTpMaxDistance;
+    private final double clickTpVlAdd;
+    private final long clickTpAllowAfterMs;
 
     private final PunishAction punishAction;
     private final double punishThreshold;
@@ -154,6 +163,13 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
         this.flyMaxAbsYDelta = cfg.getDouble("checks.fly.max_abs_y_delta_per_tick", 0.02);
         this.flyVlAdd = cfg.getDouble("checks.fly.vl_add", 1.5);
         this.flyIgnoreAfterLiquidMs = cfg.getLong("checks.fly.ignore_after_liquid_ms", 1500L);
+        this.flyIgnoreAfterDamageMs = cfg.getLong("checks.fly.ignore_after_damage_ms", 3000L);
+        this.flyLongAirTicks = cfg.getInt("checks.fly.long_air_ticks", 28);
+
+        this.clickTpEnabled = cfg.getBoolean("checks.clicktp.enabled", true);
+        this.clickTpMaxDistance = cfg.getDouble("checks.clicktp.max_distance", 10.0);
+        this.clickTpVlAdd = cfg.getDouble("checks.clicktp.vl_add", 2.0);
+        this.clickTpAllowAfterMs = cfg.getLong("checks.clicktp.allow_after_legit_tp_ms", 1200L);
 
         this.punishAction = PunishAction.fromString(cfg.getString("punishments.action", "SETBACK"));
         this.punishThreshold = cfg.getDouble("punishments.threshold_vl", 6.0);
@@ -189,7 +205,62 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
         if (!(e.getEntity() instanceof Player)) return;
         Player p = (Player) e.getEntity();
         MoveState st = states.computeIfAbsent(p.getUniqueId(), k -> new MoveState(p.getLocation(), System.currentTimeMillis()));
-        st.lastVelocityAt = System.currentTimeMillis();
+        long now = System.currentTimeMillis();
+        st.lastVelocityAt = now;
+        st.lastDamageAt = now;
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onTeleport(PlayerTeleportEvent e) {
+        Player p = e.getPlayer();
+        if (p == null) return;
+
+        MoveState st = states.computeIfAbsent(p.getUniqueId(), k -> new MoveState(p.getLocation(), System.currentTimeMillis()));
+        long now = System.currentTimeMillis();
+
+        boolean allowed = e.getCause() == PlayerTeleportEvent.TeleportCause.COMMAND
+                || e.getCause() == PlayerTeleportEvent.TeleportCause.PLUGIN;
+
+        Location from = e.getFrom();
+        Location to = e.getTo();
+        if (clickTpEnabled && !allowed && from != null && to != null && from.getWorld() != null && to.getWorld() != null && from.getWorld().equals(to.getWorld())) {
+            double dist = from.distance(to);
+            if (dist > clickTpMaxDistance) {
+                double next = vl.addVl(p.getUniqueId(), CheckType.CLICKTP, clickTpVlAdd);
+                alert(p, "CLICKTP", next, "cause=" + e.getCause().name() + ", dist=" + DF2.format(dist));
+                if (plugin.canPunish()) {
+                    e.setCancelled(true);
+                    if (punishAction == PunishAction.SETBACK && setbackOnFlag) {
+                        plugin.setback(p);
+                    }
+                }
+            }
+        }
+
+        if (allowed) {
+            st.lastAllowedTeleportAt = now;
+        }
+
+        Location finalLoc = e.isCancelled() ? from : to;
+        if (finalLoc != null) {
+            st.lastLoc = finalLoc.clone();
+            st.lastMoveAt = now;
+            if (allowed) plugin.updateLastSafe(p, finalLoc);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onRespawn(PlayerRespawnEvent e) {
+        Player p = e.getPlayer();
+        if (p == null) return;
+        MoveState st = states.computeIfAbsent(p.getUniqueId(), k -> new MoveState(p.getLocation(), System.currentTimeMillis()));
+        long now = System.currentTimeMillis();
+        st.lastAllowedTeleportAt = now;
+        if (e.getRespawnLocation() != null) {
+            st.lastLoc = e.getRespawnLocation().clone();
+            st.lastMoveAt = now;
+            plugin.updateLastSafe(p, e.getRespawnLocation());
+        }
     }
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
@@ -243,6 +314,24 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
 
         if (isInLiquid(p)) {
             st.lastLiquidAt = now;
+        }
+
+        double distFromLast = st.lastLoc.distance(to);
+        boolean recentAllowedTeleport = (now - st.lastAllowedTeleportAt) <= clickTpAllowAfterMs;
+
+        if (clickTpEnabled && distFromLast > clickTpMaxDistance && !recentAllowedTeleport) {
+            double next = vl.addVl(p.getUniqueId(), CheckType.CLICKTP, clickTpVlAdd);
+            alert(p, "CLICKTP", next, "dist=" + DF2.format(distFromLast) + ", max=" + DF2.format(clickTpMaxDistance));
+
+            if (plugin.canPunish()) {
+                e.setTo(st.lastLoc.clone());
+                if (punishAction == PunishAction.SETBACK && setbackOnFlag) {
+                    plugin.setback(p);
+                }
+            }
+
+            st.lastMoveAt = now;
+            return;
         }
 
         // BLINK: sudden large move (anti-blink). If moved too far, rollback + punish.
@@ -391,6 +480,8 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
                 double predictedNextVy = (st.vy - 0.08D) * 0.98D;
 
                 boolean recentVelocity = (now - st.lastVelocityAt) < 600L;
+                boolean recentDamage = (now - st.lastDamageAt) <= flyIgnoreAfterDamageMs;
+                boolean hasPotion = !p.getActivePotionEffects().isEmpty();
 
                 // Hovering: near-zero dy for many ticks while in air (and not in liquids/ladders/web etc.)
                 if (Math.abs(dy) < 0.02D) st.hoverTicks++; else st.hoverTicks = 0;
@@ -402,11 +493,15 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
                 // Keep the old "small dy" heuristic as a weaker signal, but only after some air ticks.
                 boolean badSmallDy = st.airTicks >= flyMinAirTicks && Math.abs(dy) <= flyMaxAbsYDelta;
 
+                // User-requested criterion: long time in air, no recent damage, no potion effects.
+                boolean longAirNoContext = st.airTicks >= flyLongAirTicks && !recentDamage && !hasPotion;
+                boolean badLongAir = longAirNoContext && (st.hoverTicks >= 6 || Math.abs(dy) <= 0.03D);
+
                 boolean recentLiquid = (now - st.lastLiquidAt) <= flyIgnoreAfterLiquidMs;
-                boolean suspiciousFly = !isInWeirdBlock(p) && !recentLiquid && (badHover || badPhysics || badSmallDy);
+                boolean suspiciousFly = !isInWeirdBlock(p) && !recentLiquid && (badLongAir || badHover || badPhysics || badSmallDy);
                 if (suspiciousFly) {
                     // Grim-like buffering: require sustained bad air movement before VL.
-                    st.flyBuffer = Math.min(4.0, st.flyBuffer + 1.0);
+                    st.flyBuffer = Math.min(4.0, st.flyBuffer + (badLongAir ? 1.2 : 1.0));
                     if (st.flyBuffer >= 2.0) {
                         double next = vl.addVl(p.getUniqueId(), CheckType.FLY, flyVlAdd);
                         alert(p, "FLY", next,
@@ -416,6 +511,9 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
                                         ", diff=" + DF2.format(diff) +
                                         ", buf=" + DF2.format(st.flyBuffer) +
                                         (recentVelocity ? ", vel" : "") +
+                                        (recentDamage ? ", dmg" : "") +
+                                        (hasPotion ? ", potion" : "") +
+                                        (badLongAir ? ", longAir" : "") +
                                         (badHover ? ", hover" : "") +
                                         (badPhysics ? ", phys" : ""));
                         flaggedThisMove = true;
@@ -561,6 +659,8 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
         private Location lastLoc;
         private long lastMoveAt;
         private long lastVelocityAt;
+        private long lastDamageAt;
+        private long lastAllowedTeleportAt;
         private int airTicks;
         private int hoverTicks;
         private double flyBuffer;
@@ -580,6 +680,8 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
             this.lastLoc = lastLoc.clone();
             this.lastMoveAt = lastMoveAt;
             this.lastVelocityAt = 0L;
+            this.lastDamageAt = 0L;
+            this.lastAllowedTeleportAt = 0L;
             this.airTicks = 0;
             this.hoverTicks = 0;
             this.flyBuffer = 0.0;

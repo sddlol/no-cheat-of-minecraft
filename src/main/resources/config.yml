@@ -52,7 +52,18 @@ checks:
     max_abs_y_delta_per_tick: 0.02
     # Water/lava movement is noisy, give fly check a short grace window after liquid contact.
     ignore_after_liquid_ms: 1500
+    # After taking damage, suspend long-air judging for a while.
+    ignore_after_damage_ms: 3000
+    # Core signal: long time in air without damage/potion context.
+    long_air_ticks: 28
     vl_add: 1.5
+
+  clicktp:
+    enabled: true
+    # Non-command/plugin/respawn long-distance movement cap.
+    max_distance: 10.0
+    allow_after_legit_tp_ms: 1200
+    vl_add: 2.0
 
   reach:
     enabled: true

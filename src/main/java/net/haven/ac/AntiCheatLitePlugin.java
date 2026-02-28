@@ -225,7 +225,8 @@ public final class AntiCheatLitePlugin extends JavaPlugin {
                     " velocity=" + violationManager.getVl(id, CheckType.VELOCITY) +
                     " badpackets=" + violationManager.getVl(id, CheckType.BADPACKETS) +
                     " timer=" + violationManager.getVl(id, CheckType.TIMER) +
-                    " invmove=" + violationManager.getVl(id, CheckType.INVMOVE)));
+                    " invmove=" + violationManager.getVl(id, CheckType.INVMOVE) +
+                    " clicktp=" + violationManager.getVl(id, CheckType.CLICKTP)));
             String last = getLastFlagReason(id);
             long at = getLastFlagAt(id);
             if (last != null && at > 0L) {
