@@ -13,6 +13,8 @@ import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.util.Vector;
 
 import java.text.DecimalFormat;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -50,6 +52,16 @@ public final class CombatListener implements Listener {
     private final boolean auraNullifyDamageOnBlocked;
     private final double auraAnnoyDamage;
 
+    // Rotation smoothness (aim-assist style)
+    private final boolean auraSmoothEnabled;
+    private final int auraSmoothWindowMs;
+    private final int auraSmoothMinSamples;
+    private final double auraSmoothMaxYawStdDeg;
+    private final double auraSmoothMaxPitchStdDeg;
+    private final double auraSmoothMinAvgYawDeg;
+    private final double auraSmoothMinAvgPitchDeg;
+    private final double auraSmoothVlAdd;
+
     private final PunishAction punishAction;
     private final double punishThreshold;
     private final boolean setbackOnFlag;
@@ -86,6 +98,15 @@ public final class CombatListener implements Listener {
         this.auraNullifyDamageOnBlocked = cfg.getBoolean("checks.killaura.nullify_damage_on_blocked", true);
         this.auraAnnoyDamage = cfg.getDouble("checks.killaura.annoy_damage", AntiCheatLitePlugin.DEFAULT_PUNISH_DAMAGE);
 
+        this.auraSmoothEnabled = cfg.getBoolean("checks.killaura.smooth_rotation.enabled", true);
+        this.auraSmoothWindowMs = cfg.getInt("checks.killaura.smooth_rotation.window_ms", 1400);
+        this.auraSmoothMinSamples = cfg.getInt("checks.killaura.smooth_rotation.min_samples", 5);
+        this.auraSmoothMaxYawStdDeg = cfg.getDouble("checks.killaura.smooth_rotation.max_yaw_stddev_deg", 0.90);
+        this.auraSmoothMaxPitchStdDeg = cfg.getDouble("checks.killaura.smooth_rotation.max_pitch_stddev_deg", 0.70);
+        this.auraSmoothMinAvgYawDeg = cfg.getDouble("checks.killaura.smooth_rotation.min_avg_yaw_delta_deg", 1.80);
+        this.auraSmoothMinAvgPitchDeg = cfg.getDouble("checks.killaura.smooth_rotation.min_avg_pitch_delta_deg", 0.25);
+        this.auraSmoothVlAdd = cfg.getDouble("checks.killaura.smooth_rotation.vl_add", 1.0);
+
         this.punishAction = PunishAction.fromString(cfg.getString("punishments.action", "SETBACK"));
         this.punishThreshold = cfg.getDouble("punishments.threshold_vl", 6.0);
         this.setbackOnFlag = cfg.getBoolean("punishments.setback_on_flag", true);
@@ -107,6 +128,7 @@ public final class CombatListener implements Listener {
         boolean auraFlag = false;
         String reachDetail = "";
         String auraDetail = "";
+        double auraBaseAdd = auraVlAdd;
 
         ReachUtil.ReachResult rr = null;
 
@@ -152,7 +174,39 @@ public final class CombatListener implements Listener {
                 suspiciousLos = ReachUtil.isThroughWall(p, target, dist);
             }
 
-            if (suspiciousAngle || suspiciousSwitch || suspiciousLos) {
+            boolean suspiciousSmooth = false;
+            double yawStd = 999.0;
+            double pitchStd = 999.0;
+            double yawAvg = 0.0;
+            double pitchAvg = 0.0;
+            if (auraSmoothEnabled) {
+                float yawNow = normalizeYaw(eye.getYaw());
+                float pitchNow = eye.getPitch();
+                if (st.hasLastRot && (now - st.lastHitAt) <= auraSmoothWindowMs) {
+                    double dyaw = Math.abs(deltaYaw(yawNow, st.lastYaw));
+                    double dpitch = Math.abs(pitchNow - st.lastPitch);
+                    st.rotDeltas.addLast(new RotDelta(now, dyaw, dpitch));
+                    while (!st.rotDeltas.isEmpty() && (now - st.rotDeltas.peekFirst().t) > auraSmoothWindowMs) {
+                        st.rotDeltas.removeFirst();
+                    }
+
+                    if (st.rotDeltas.size() >= auraSmoothMinSamples) {
+                        yawStd = stdDev(st.rotDeltas, true);
+                        pitchStd = stdDev(st.rotDeltas, false);
+                        yawAvg = avg(st.rotDeltas, true);
+                        pitchAvg = avg(st.rotDeltas, false);
+
+                        boolean veryStable = yawStd <= auraSmoothMaxYawStdDeg && pitchStd <= auraSmoothMaxPitchStdDeg;
+                        boolean enoughMovement = yawAvg >= auraSmoothMinAvgYawDeg || pitchAvg >= auraSmoothMinAvgPitchDeg;
+                        suspiciousSmooth = veryStable && enoughMovement;
+                    }
+                }
+                st.lastYaw = yawNow;
+                st.lastPitch = pitchNow;
+                st.hasLastRot = true;
+            }
+
+            if (suspiciousAngle || suspiciousSwitch || suspiciousLos || suspiciousSmooth) {
                 auraFlag = true;
                 StringBuilder details = new StringBuilder();
                 if (suspiciousAngle) {
@@ -167,6 +221,17 @@ public final class CombatListener implements Listener {
                     if (details.length() > 0) details.append(", ");
                     details.append("blocked");
                 }
+                if (suspiciousSmooth) {
+                    if (details.length() > 0) details.append(", ");
+                    details.append("smooth(yStd=").append(DF2.format(yawStd))
+                            .append(",pStd=").append(DF2.format(pitchStd))
+                            .append(",yAvg=").append(DF2.format(yawAvg))
+                            .append(",pAvg=").append(DF2.format(pitchAvg)).append(")");
+                    if (!suspiciousAngle && !suspiciousSwitch && !suspiciousLos) {
+                        auraBaseAdd = auraSmoothVlAdd;
+                    }
+                }
+
                 auraDetail = details.toString();
                 flagged = true;
                 if (auraCancelOnFlag) e.setCancelled(true);
@@ -197,7 +262,7 @@ public final class CombatListener implements Listener {
 
         if (auraFlag) {
             boolean combo = reachFlag;
-            double add = auraVlAdd * (combo ? auraComboWeight : auraSoloWeight);
+            double add = auraBaseAdd * (combo ? auraComboWeight : auraSoloWeight);
             double next = vl.addVl(p.getUniqueId(), CheckType.KILLAURA, add);
             alert(p, "KILLAURA", next, auraDetail + (combo ? ", combo" : ", solo"));
             flagged = true;
@@ -239,8 +304,63 @@ public final class CombatListener implements Listener {
         return Math.max(min, Math.min(max, v));
     }
 
+    private static float normalizeYaw(float yaw) {
+        float y = yaw;
+        while (y <= -180f) y += 360f;
+        while (y > 180f) y -= 360f;
+        return y;
+    }
+
+    private static double deltaYaw(float a, float b) {
+        double d = a - b;
+        while (d <= -180.0) d += 360.0;
+        while (d > 180.0) d -= 360.0;
+        return d;
+    }
+
+    private static double avg(Deque<RotDelta> samples, boolean yaw) {
+        if (samples.isEmpty()) return 0.0;
+        double sum = 0.0;
+        int n = 0;
+        for (RotDelta s : samples) {
+            sum += yaw ? s.yawDelta : s.pitchDelta;
+            n++;
+        }
+        return n <= 0 ? 0.0 : (sum / n);
+    }
+
+    private static double stdDev(Deque<RotDelta> samples, boolean yaw) {
+        if (samples.size() < 2) return 9999.0;
+        double mean = avg(samples, yaw);
+        double ss = 0.0;
+        int n = 0;
+        for (RotDelta s : samples) {
+            double d = (yaw ? s.yawDelta : s.pitchDelta) - mean;
+            ss += d * d;
+            n++;
+        }
+        if (n <= 1) return 9999.0;
+        return Math.sqrt(ss / (n - 1));
+    }
+
     private static final class AuraState {
         private long lastHitAt = 0L;
         private UUID lastTargetId = null;
+        private boolean hasLastRot = false;
+        private float lastYaw = 0f;
+        private float lastPitch = 0f;
+        private final Deque<RotDelta> rotDeltas = new ArrayDeque<>();
+    }
+
+    private static final class RotDelta {
+        private final long t;
+        private final double yawDelta;
+        private final double pitchDelta;
+
+        private RotDelta(long t, double yawDelta, double pitchDelta) {
+            this.t = t;
+            this.yawDelta = yawDelta;
+            this.pitchDelta = pitchDelta;
+        }
     }
 }

@@ -74,6 +74,17 @@ checks:
     # "Annoy" damage dealt to the attacker when flagged (2.0 = 1 heart).
     annoy_damage: 2.0
 
+    # Head-rotation smoothness check (aim-assist style):
+    smooth_rotation:
+      enabled: true
+      window_ms: 1400
+      min_samples: 5
+      max_yaw_stddev_deg: 0.90
+      max_pitch_stddev_deg: 0.70
+      min_avg_yaw_delta_deg: 1.80
+      min_avg_pitch_delta_deg: 0.25
+      vl_add: 1.0
+
   autoclicker:
     enabled: true
     window_ms: 1000
