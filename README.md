@@ -30,10 +30,12 @@ Current direction: keep **1.8.x ~ 1.21.x** compatibility while moving more check
 - Estimate allowed movement from simplified vanilla rules (ground/air/potion/environment/item-use)
 - Use **offset + buffer** instead of single-tick thresholding
 
-### KillAura (multi-signal)
-- angle / switch / line-of-sight
+### Combat model (Reach + KillAura)
+- Reach supports latency rewind (target history) to reduce high-ping false positives
+- KillAura signals: angle / switch / line-of-sight
 - smooth_rotation (overly stable aim movement)
 - GCD-like rotation quantization check (fixed-step aim patterns)
+- jerk model (abnormally low aim jerk while still rotating)
 - Reach + Aura combo weighting for higher confidence when both trigger
 
 ### Scaffold (prediction constraints)
@@ -85,6 +87,11 @@ Current direction: keep **1.8.x ~ 1.21.x** compatibility while moving more check
 | `/acstatus` | Show your total VL |
 | `/acstatus <player>` | Show per-check VL + last flag details |
 | `/acdebug [on\|off]` | Toggle chat debug alerts |
+| `/acshadow [on\|off]` | Shadow mode: VL only, no punish/setback |
+| `/acprofile <practice\|survival\|minigame>` | Apply built-in tuning profile |
+| `/actop [count]` | Show top online players by total VL |
+| `/actrace <player> [count]` | Show recent evidence snapshots |
+| `/acevidence <player> [count]` | Alias of `/actrace` |
 
 > Exact permissions/commands are defined in `plugin.yml`.
 
@@ -99,11 +106,14 @@ Tune in this order:
 
 Focus sections:
 - `checks.killaura.*`
+- `checks.reach.rewind_*`
 - `checks.noslow.*`
 - `checks.scaffold.prediction.*`
 - `checks.xray.*`
 - `checks.vl_reset_guard.*`
 - `punishments.annoy_mode_threshold_vl`
+- `experimental.shadow_mode.enabled`
+- `experimental.evidence.max_entries_per_player`
 - `setback.*`
 
 ---
@@ -125,8 +135,8 @@ target/*.jar
 ## Release (Tag)
 
 ```bash
-git tag -a v1.8.6 -m "Release v1.8.6"
-git push origin v1.8.6
+git tag -a v1.9.0 -m "Release v1.9.0"
+git push origin v1.9.0
 ```
 
 ---

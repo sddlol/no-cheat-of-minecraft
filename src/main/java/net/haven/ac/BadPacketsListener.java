@@ -145,7 +145,7 @@ public final class BadPacketsListener implements Listener {
         double next = vl.addVl(p.getUniqueId(), CheckType.BADPACKETS, add);
         alert(p, "BADPACKETS", next, details);
 
-        if (cancelOnFlag) {
+        if (cancelOnFlag && plugin.canPunish()) {
             e.setTo(e.getFrom());
         }
 
@@ -170,6 +170,7 @@ public final class BadPacketsListener implements Listener {
     }
 
     private void maybePunish(Player p) {
+        if (!plugin.canPunish()) return;
         double total = vl.getTotalVl(p.getUniqueId());
         if (total < punishThreshold) return;
         if (punishAction == PunishAction.KICK) {

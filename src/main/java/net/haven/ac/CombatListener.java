@@ -10,6 +10,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.util.Vector;
 
 import java.text.DecimalFormat;
@@ -40,6 +41,9 @@ public final class CombatListener implements Listener {
     private final double reachPingCompCap;
     private final double reachVlAdd;
     private final boolean reachCancelOnFlag;
+    private final boolean reachRewindEnabled;
+    private final int reachRewindMaxMs;
+    private final int reachRewindHistoryWindowMs;
     private final double reachSoloWeight;
     private final double reachComboWeight;
 
@@ -85,6 +89,7 @@ public final class CombatListener implements Listener {
     private final boolean setbackOnFlag;
 
     private final Map<UUID, AuraState> auraStates = new ConcurrentHashMap<>();
+    private final Map<UUID, Deque<PosSample>> targetHistory = new ConcurrentHashMap<>();
 
     private static final DecimalFormat DF2 = new DecimalFormat("0.00");
 
@@ -102,6 +107,9 @@ public final class CombatListener implements Listener {
         this.reachPingCompCap = cfg.getDouble("checks.reach.ping_comp_cap_blocks", 0.35);
         this.reachVlAdd = cfg.getDouble("checks.reach.vl_add", 2.0);
         this.reachCancelOnFlag = cfg.getBoolean("checks.reach.cancel_on_flag", false);
+        this.reachRewindEnabled = cfg.getBoolean("checks.reach.rewind_enabled", true);
+        this.reachRewindMaxMs = cfg.getInt("checks.reach.rewind_max_ms", 180);
+        this.reachRewindHistoryWindowMs = cfg.getInt("checks.reach.rewind_history_window_ms", 1200);
         this.reachSoloWeight = cfg.getDouble("checks.reach.solo_weight", 0.90);
         this.reachComboWeight = cfg.getDouble("checks.reach.combo_weight", 1.20);
 
@@ -144,6 +152,19 @@ public final class CombatListener implements Listener {
         this.setbackOnFlag = cfg.getBoolean("punishments.setback_on_flag", true);
     }
 
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
+    public void onTargetMove(PlayerMoveEvent e) {
+        Player p = e.getPlayer();
+        if (p == null || e.getTo() == null) return;
+        if (e.getFrom().getWorld() == null || e.getTo().getWorld() == null || !e.getFrom().getWorld().equals(e.getTo().getWorld())) return;
+
+        long now = System.currentTimeMillis();
+        Deque<PosSample> q = targetHistory.computeIfAbsent(p.getUniqueId(), k -> new ArrayDeque<PosSample>());
+        q.addLast(new PosSample(now, e.getTo().clone()));
+        while (!q.isEmpty() && (now - q.peekFirst().t) > reachRewindHistoryWindowMs) q.removeFirst();
+        while (q.size() > 100) q.removeFirst();
+    }
+
     @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGH)
     public void onDamage(EntityDamageByEntityEvent e) {
         if (!(e.getDamager() instanceof Player)) return;
@@ -173,10 +194,23 @@ public final class CombatListener implements Listener {
             double pingExtra = Math.min(reachPingCompCap, ping * reachPingCompPerMs);
             double allowed = reachBase + pingExtra;
 
+            String rewindNote = "";
+            if (reachRewindEnabled && target instanceof Player) {
+                int rewindMs = Math.max(0, Math.min(reachRewindMaxMs, ping));
+                Location rew = getRewoundLocation(target.getUniqueId(), System.currentTimeMillis() - rewindMs);
+                if (rew != null && rew.getWorld() != null && p.getWorld() != null && rew.getWorld().equals(p.getWorld())) {
+                    Location eye = p.getEyeLocation();
+                    Location mid = rew.clone().add(0.0, ((Player) target).getEyeHeight() * 0.5, 0.0);
+                    double rewDist = eye.distance(mid);
+                    if (rewDist < reach) reach = rewDist;
+                    rewindNote = ", rew=" + DF2.format(rewDist) + "@" + rewindMs + "ms";
+                }
+            }
+
             if (reach > allowed) {
                 reachFlag = true;
                 reachDetail = "reach=" + DF2.format(reach) + ">" + DF2.format(allowed) +
-                        ", ping=" + ping + "ms" +
+                        ", ping=" + ping + "ms" + rewindNote +
                         (rr.rayIntersects ? ", ray" : ", fallback") +
                         (rr.blocked ? ", blocked" : "");
             }
@@ -312,10 +346,10 @@ public final class CombatListener implements Listener {
 
                 auraDetail = details.toString();
                 flagged = true;
-                if (auraCancelOnFlag) e.setCancelled(true);
+                if (auraCancelOnFlag && plugin.canPunish()) e.setCancelled(true);
 
                 // Grim-style annoyance: if the hit is blocked by blocks, set damage to 0.
-                if (auraNullifyDamageOnBlocked && suspiciousLos && !e.isCancelled()) {
+                if (auraNullifyDamageOnBlocked && suspiciousLos && !e.isCancelled() && plugin.canPunish()) {
                     e.setDamage(0.0);
                 }
 
@@ -335,7 +369,7 @@ public final class CombatListener implements Listener {
             double next = vl.addVl(p.getUniqueId(), CheckType.REACH, add);
             alert(p, "REACH", next, reachDetail + (combo ? ", combo" : ", solo"));
             flagged = true;
-            if (reachCancelOnFlag) e.setCancelled(true);
+            if (reachCancelOnFlag && plugin.canPunish()) e.setCancelled(true);
         }
 
         if (auraFlag) {
@@ -355,6 +389,7 @@ public final class CombatListener implements Listener {
     }
 
     private void maybePunish(Player p) {
+        if (!plugin.canPunish()) return;
         double total = vl.getTotalVl(p.getUniqueId());
         if (total < punishThreshold) return;
         if (punishAction == PunishAction.KICK) {
@@ -376,6 +411,23 @@ public final class CombatListener implements Listener {
         }
         plugin.recordLastFlag(suspected, check, details);
         plugin.getLogger().info("[AC] " + suspected.getName() + " " + check + " VL=" + DF2.format(checkVl) + " (" + details + ")");
+    }
+
+    private Location getRewoundLocation(UUID id, long targetTime) {
+        if (id == null) return null;
+        Deque<PosSample> q = targetHistory.get(id);
+        if (q == null || q.isEmpty()) return null;
+
+        PosSample best = null;
+        long bestDiff = Long.MAX_VALUE;
+        for (PosSample s : q) {
+            long d = Math.abs(s.t - targetTime);
+            if (d < bestDiff) {
+                best = s;
+                bestDiff = d;
+            }
+        }
+        return best == null ? null : best.loc.clone();
     }
 
     private static double clamp(double v, double min, double max) {
@@ -475,6 +527,16 @@ public final class CombatListener implements Listener {
         private float lastYaw = 0f;
         private float lastPitch = 0f;
         private final Deque<RotDelta> rotDeltas = new ArrayDeque<>();
+    }
+
+    private static final class PosSample {
+        private final long t;
+        private final Location loc;
+
+        private PosSample(long t, Location loc) {
+            this.t = t;
+            this.loc = loc;
+        }
     }
 
     private static final class RotDelta {

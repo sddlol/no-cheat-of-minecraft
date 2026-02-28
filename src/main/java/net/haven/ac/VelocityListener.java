@@ -160,7 +160,7 @@ public final class VelocityListener implements Listener {
                         ", moved=" + DF2.format(st.movedHoriz) +
                         ", ratio=" + DF2.format(ratio));
 
-        if (cancelOnFlag) {
+        if (cancelOnFlag && plugin.canPunish()) {
             e.setTo(e.getFrom());
         }
 
@@ -201,6 +201,7 @@ public final class VelocityListener implements Listener {
     }
 
     private void maybePunish(Player p) {
+        if (!plugin.canPunish()) return;
         double total = vl.getTotalVl(p.getUniqueId());
         if (total < punishThreshold) return;
         if (punishAction == PunishAction.KICK) {

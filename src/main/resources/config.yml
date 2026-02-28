@@ -60,6 +60,10 @@ checks:
     ping_comp_cap_blocks: 0.30
     vl_add: 2.0
     cancel_on_flag: false
+    # Rewind target position by latency to reduce false positives on high ping.
+    rewind_enabled: true
+    rewind_max_ms: 180
+    rewind_history_window_ms: 1200
     # When reach and aura flag together, increase certainty.
     solo_weight: 0.90
     combo_weight: 1.20
@@ -285,6 +289,12 @@ setback:
 
 
 debug_chat_default: true
+
+experimental:
+  shadow_mode:
+    enabled: false
+  evidence:
+    max_entries_per_player: 20
 
 blink:
   enabled: true

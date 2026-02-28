@@ -420,6 +420,7 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
     }
 
     private void maybePunish(Player p) {
+        if (!plugin.canPunish()) return;
         double total = vl.getTotalVl(p.getUniqueId());
         if (total < punishThreshold) return;
         if (punishAction == PunishAction.KICK) {

@@ -1,5 +1,5 @@
 name: AntiCheatLite
-version: 1.8.6
+version: 1.9.0
 main: net.haven.ac.AntiCheatLitePlugin
 api-version: 1.16
 author: haven
@@ -16,6 +16,26 @@ commands:
   acdebug:
     description: Toggle AntiCheatLite chat debug alerts
     usage: /acdebug [on|off]
+    permission: anticheatlite.admin
+  acshadow:
+    description: Toggle shadow mode (VL only, no punish/setback)
+    usage: /acshadow [on|off]
+    permission: anticheatlite.admin
+  acprofile:
+    description: Apply a built-in profile preset
+    usage: /acprofile <practice|survival|minigame>
+    permission: anticheatlite.admin
+  actop:
+    description: Show top online players by total VL
+    usage: /actop [count]
+    permission: anticheatlite.admin
+  actrace:
+    description: Show recent evidence snapshots for a player
+    usage: /actrace <player> [count]
+    permission: anticheatlite.admin
+  acevidence:
+    description: Alias of /actrace
+    usage: /acevidence <player> [count]
     permission: anticheatlite.admin
 permissions:
   anticheatlite.alert:

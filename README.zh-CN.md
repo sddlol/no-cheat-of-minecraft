@@ -30,10 +30,12 @@
 - 基于简化 vanilla 规则估算允许移动（地面/空中/药水/环境/使用物品）
 - 使用 **offset + buffer**，而不是单次越线即判
 
-### KillAura（多信号）
-- angle / switch / line-of-sight
+### 战斗模型（Reach + KillAura）
+- Reach 支持延迟回溯（目标历史位置），降低高 ping 误报
+- KillAura 信号：angle / switch / line-of-sight
 - smooth_rotation（异常平滑转头）
 - GCD-like 步进检测（固定步长转头模式）
+- jerk 模型（持续转头但“抖动加速度”异常低）
 - Reach + Aura 组合权重（同时触发时提高可信度）
 
 ### Scaffold（预测约束）
@@ -85,6 +87,11 @@
 | `/acstatus` | 查看自己总 VL |
 | `/acstatus <player>` | 查看分项 VL + 最近触发详情 |
 | `/acdebug [on\|off]` | 开关聊天调试告警 |
+| `/acshadow [on\|off]` | 影子模式：只记VL，不执行惩罚/回拉 |
+| `/acprofile <practice\|survival\|minigame>` | 应用内置调参档位 |
+| `/actop [count]` | 查看在线玩家 VL 排行 |
+| `/actrace <player> [count]` | 查看最近证据快照 |
+| `/acevidence <player> [count]` | `/actrace` 别名 |
 
 > 实际权限和命令以 `plugin.yml` 为准。
 
@@ -99,11 +106,14 @@
 
 重点配置段：
 - `checks.killaura.*`
+- `checks.reach.rewind_*`
 - `checks.noslow.*`
 - `checks.scaffold.prediction.*`
 - `checks.xray.*`
 - `checks.vl_reset_guard.*`
 - `punishments.annoy_mode_threshold_vl`
+- `experimental.shadow_mode.enabled`
+- `experimental.evidence.max_entries_per_player`
 - `setback.*`
 
 ---
@@ -125,8 +135,8 @@ target/*.jar
 ## 发布（Tag）
 
 ```bash
-git tag -a v1.8.6 -m "Release v1.8.6"
-git push origin v1.8.6
+git tag -a v1.9.0 -m "Release v1.9.0"
+git push origin v1.9.0
 ```
 
 ---

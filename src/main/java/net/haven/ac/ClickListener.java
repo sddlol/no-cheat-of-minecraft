@@ -126,6 +126,7 @@ public final class ClickListener implements Listener {
     }
 
     private void maybePunish(Player p) {
+        if (!plugin.canPunish()) return;
         double total = vl.getTotalVl(p.getUniqueId());
         if (total < punishThreshold) return;
         if (punishAction == PunishAction.KICK) {

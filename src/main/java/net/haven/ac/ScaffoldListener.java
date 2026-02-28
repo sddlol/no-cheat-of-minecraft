@@ -222,7 +222,7 @@ public final class ScaffoldListener implements Listener {
                 plugin.punishDamage(p, scaffoldPunishDamage, "SCAFFOLD flagged");
             }
 
-            if (cancelOnFlag) {
+            if (cancelOnFlag && plugin.canPunish()) {
                 e.setCancelled(true);
             }
 
