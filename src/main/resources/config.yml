@@ -138,6 +138,16 @@ checks:
       min_avg_step_distance: 5.5
       vl_add: 1.5
 
+  # Guard for suspicious sudden "all VL becomes zero" resets.
+  vl_reset_guard:
+    enabled: true
+    # Must have at least this total VL before reset-to-zero is considered suspicious.
+    min_previous_total_vl: 8.0
+    # Previous high VL and current zero must occur within this time window.
+    max_drop_window_ms: 5000
+    # Avoid repeated punishment spam.
+    cooldown_ms: 15000
+
 
 movement_sim:
   enabled: true
