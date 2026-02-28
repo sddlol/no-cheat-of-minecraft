@@ -74,8 +74,8 @@ public final class NoFallListener implements Listener {
         if (p.isInsideVehicle()) return true;
         if (p.isDead()) return true;
 
-        if (p.hasPotionEffect(Compat.potionType("SLOW_FALLING"))) return true;
-        if (p.hasPotionEffect(Compat.potionType("LEVITATION"))) return true;
+        if (Compat.hasPotion(p, "SLOW_FALLING")) return true;
+        if (Compat.hasPotion(p, "LEVITATION")) return true;
 
         return false;
     }

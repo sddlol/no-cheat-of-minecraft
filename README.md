@@ -143,8 +143,8 @@ target/*.jar
 ## Release (Tag)
 
 ```bash
-git tag -a v1.10.1 -m "Release v1.10.1"
-git push origin v1.10.1
+git tag -a v1.10.2 -m "Release v1.10.2"
+git push origin v1.10.2
 ```
 
 ---

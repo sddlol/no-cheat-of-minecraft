@@ -50,17 +50,6 @@ checks:
     enabled: true
     min_air_ticks: 14
     max_abs_y_delta_per_tick: 0.02
-    # Physics diff tolerance between expected and actual vertical delta.
-    physics_tolerance: 0.20
-    # Hover only counts suspicious when player still has enough horizontal drift.
-    hover_min_horizontal_bps: 1.10
-    # First air tick jump cap (base + jump potion allowance).
-    max_initial_jump_dy: 0.43
-    jump_potion_per_level: 0.10
-    # Grim-like weighted buffering.
-    buffer_add_major: 1.0
-    buffer_add_minor: 0.6
-    buffer_decay: 0.25
     vl_add: 1.5
 
   reach:

@@ -84,13 +84,6 @@ private final boolean flyEnabled;
     private final int flyMinAirTicks;
     private final double flyMaxAbsYDelta;
     private final double flyVlAdd;
-    private final double flyPhysicsTolerance;
-    private final double flyHoverMinHorizontalBps;
-    private final double flyMaxInitialJumpDy;
-    private final double flyJumpPotionPerLevel;
-    private final double flyMajorBufferAdd;
-    private final double flyMinorBufferAdd;
-    private final double flyBufferDecay;
 
     private final PunishAction punishAction;
     private final double punishThreshold;
@@ -159,13 +152,6 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
         this.flyMinAirTicks = cfg.getInt("checks.fly.min_air_ticks", 14);
         this.flyMaxAbsYDelta = cfg.getDouble("checks.fly.max_abs_y_delta_per_tick", 0.02);
         this.flyVlAdd = cfg.getDouble("checks.fly.vl_add", 1.5);
-        this.flyPhysicsTolerance = cfg.getDouble("checks.fly.physics_tolerance", 0.20);
-        this.flyHoverMinHorizontalBps = cfg.getDouble("checks.fly.hover_min_horizontal_bps", 1.10);
-        this.flyMaxInitialJumpDy = cfg.getDouble("checks.fly.max_initial_jump_dy", 0.43);
-        this.flyJumpPotionPerLevel = cfg.getDouble("checks.fly.jump_potion_per_level", 0.10);
-        this.flyMajorBufferAdd = cfg.getDouble("checks.fly.buffer_add_major", 1.0);
-        this.flyMinorBufferAdd = cfg.getDouble("checks.fly.buffer_add_minor", 0.6);
-        this.flyBufferDecay = cfg.getDouble("checks.fly.buffer_decay", 0.25);
 
         this.punishAction = PunishAction.fromString(cfg.getString("punishments.action", "SETBACK"));
         this.punishThreshold = cfg.getDouble("punishments.threshold_vl", 6.0);
@@ -401,33 +387,20 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
 
                 boolean recentVelocity = (now - st.lastVelocityAt) < 600L;
 
-                double dx = to.getX() - from.getX();
-                double dz = to.getZ() - from.getZ();
-                double horiz = Math.sqrt(dx * dx + dz * dz);
-                double horizBps = horiz / (Math.max(1L, dtMs) / 1000.0);
-
-                // Hovering: near-zero dy for many ticks while in air.
+                // Hovering: near-zero dy for many ticks while in air (and not in liquids/ladders/web etc.)
                 if (Math.abs(dy) < 0.02D) st.hoverTicks++; else st.hoverTicks = 0;
 
                 double diff = Math.abs(dy - expectedDy);
-                int jumpLv = 0;
-                PotionEffect jump = Compat.getPotionEffect(p, PotionEffectType.JUMP);
-                if (jump != null) jumpLv = jump.getAmplifier() + 1;
-
-                double maxJumpDy = flyMaxInitialJumpDy + (jumpLv * flyJumpPotionPerLevel) + (recentVelocity ? 0.30 : 0.0);
-                boolean badInitialJump = st.airTicks == 1 && dy > maxJumpDy;
-
-                boolean badHover = st.airTicks >= flyMinAirTicks && st.hoverTicks >= 8 && horizBps >= flyHoverMinHorizontalBps;
-                boolean badPhysics = st.airTicks >= flyMinAirTicks && !recentVelocity && diff > flyPhysicsTolerance;
-                boolean badUpward = st.airTicks >= 3 && !recentVelocity && dy > (expectedDy + flyPhysicsTolerance);
+                boolean badHover = st.airTicks >= flyMinAirTicks && st.hoverTicks >= 8;
+                boolean badPhysics = st.airTicks >= flyMinAirTicks && !recentVelocity && diff > 0.22D;
 
                 // Keep the old "small dy" heuristic as a weaker signal, but only after some air ticks.
                 boolean badSmallDy = st.airTicks >= flyMinAirTicks && Math.abs(dy) <= flyMaxAbsYDelta;
 
-                boolean suspiciousFly = !isInWeirdBlock(p) && (badInitialJump || badHover || badPhysics || badUpward || badSmallDy);
+                boolean suspiciousFly = !isInWeirdBlock(p) && (badHover || badPhysics || badSmallDy);
                 if (suspiciousFly) {
-                    double add = (badInitialJump || badPhysics || badUpward) ? flyMajorBufferAdd : flyMinorBufferAdd;
-                    st.flyBuffer = Math.min(6.0, st.flyBuffer + add);
+                    // Grim-like buffering: require sustained bad air movement before VL.
+                    st.flyBuffer = Math.min(4.0, st.flyBuffer + 1.0);
                     if (st.flyBuffer >= 2.0) {
                         double next = vl.addVl(p.getUniqueId(), CheckType.FLY, flyVlAdd);
                         alert(p, "FLY", next,
@@ -435,18 +408,14 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
                                         ", dy=" + DF2.format(dy) +
                                         ", exp=" + DF2.format(expectedDy) +
                                         ", diff=" + DF2.format(diff) +
-                                        ", hbps=" + DF2.format(horizBps) +
                                         ", buf=" + DF2.format(st.flyBuffer) +
                                         (recentVelocity ? ", vel" : "") +
-                                        (badInitialJump ? ", jump" : "") +
                                         (badHover ? ", hover" : "") +
-                                        (badPhysics ? ", phys" : "") +
-                                        (badUpward ? ", up" : "") +
-                                        (badSmallDy ? ", smallDy" : ""));
+                                        (badPhysics ? ", phys" : ""));
                         flaggedThisMove = true;
                     }
                 } else {
-                    st.flyBuffer = Math.max(0.0, st.flyBuffer - flyBufferDecay);
+                    st.flyBuffer = Math.max(0.0, st.flyBuffer - 0.25);
                 }
 
                 st.vy = predictedNextVy;
@@ -540,7 +509,6 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
             if (p.isInsideVehicle()) return true;
             if (Compat.isGliding(p)) return true;
             if (Compat.isSwimming(p)) return true;
-            if (Compat.isRiptiding(p)) return true;
             if (Compat.hasPotion(p, "LEVITATION")) return true;
             if (Compat.hasPotion(p, "SLOW_FALLING")) return true;
         } catch (Throwable ignored) {
