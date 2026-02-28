@@ -35,6 +35,8 @@ public final class CombatListener implements Listener {
     private final double reachPingCompCap;
     private final double reachVlAdd;
     private final boolean reachCancelOnFlag;
+    private final double reachSoloWeight;
+    private final double reachComboWeight;
 
     // KillAura heuristics
     private final boolean auraEnabled;
@@ -42,6 +44,8 @@ public final class CombatListener implements Listener {
     private final long auraSwitchWindowMs;
     private final double auraVlAdd;
     private final boolean auraCancelOnFlag;
+    private final double auraSoloWeight;
+    private final double auraComboWeight;
     private final boolean auraCheckLineOfSight;
     private final boolean auraNullifyDamageOnBlocked;
     private final double auraAnnoyDamage;
@@ -68,12 +72,16 @@ public final class CombatListener implements Listener {
         this.reachPingCompCap = cfg.getDouble("checks.reach.ping_comp_cap_blocks", 0.35);
         this.reachVlAdd = cfg.getDouble("checks.reach.vl_add", 2.0);
         this.reachCancelOnFlag = cfg.getBoolean("checks.reach.cancel_on_flag", false);
+        this.reachSoloWeight = cfg.getDouble("checks.reach.solo_weight", 0.90);
+        this.reachComboWeight = cfg.getDouble("checks.reach.combo_weight", 1.20);
 
         this.auraEnabled = cfg.getBoolean("checks.killaura.enabled", true);
         this.auraMaxAngleDeg = cfg.getDouble("checks.killaura.max_angle_deg", 65.0);
         this.auraSwitchWindowMs = cfg.getLong("checks.killaura.switch_window_ms", 250L);
         this.auraVlAdd = cfg.getDouble("checks.killaura.vl_add", 1.5);
         this.auraCancelOnFlag = cfg.getBoolean("checks.killaura.cancel_on_flag", false);
+        this.auraSoloWeight = cfg.getDouble("checks.killaura.solo_weight", 0.90);
+        this.auraComboWeight = cfg.getDouble("checks.killaura.combo_weight", 1.20);
         this.auraCheckLineOfSight = cfg.getBoolean("checks.killaura.check_line_of_sight", true);
         this.auraNullifyDamageOnBlocked = cfg.getBoolean("checks.killaura.nullify_damage_on_blocked", true);
         this.auraAnnoyDamage = cfg.getDouble("checks.killaura.annoy_damage", AntiCheatLitePlugin.DEFAULT_PUNISH_DAMAGE);
@@ -95,10 +103,16 @@ public final class CombatListener implements Listener {
         Entity target = e.getEntity();
 
         boolean flagged = false;
+        boolean reachFlag = false;
+        boolean auraFlag = false;
+        String reachDetail = "";
+        String auraDetail = "";
 
-        // REACH
+        ReachUtil.ReachResult rr = null;
+
+        // REACH pre-analysis
         if (reachEnabled) {
-            ReachUtil.ReachResult rr = ReachUtil.computeReach(p, (LivingEntity) target);
+            rr = ReachUtil.computeReach(p, (LivingEntity) target);
             double reach = rr.distance;
 
             int ping = PingUtil.getPingMs(p);
@@ -106,14 +120,11 @@ public final class CombatListener implements Listener {
             double allowed = reachBase + pingExtra;
 
             if (reach > allowed) {
-                double next = vl.addVl(p.getUniqueId(), CheckType.REACH, reachVlAdd);
-                alert(p, "REACH", next,
-                        "reach=" + DF2.format(reach) + ">" + DF2.format(allowed) +
-                                ", ping=" + ping + "ms" +
-                                (rr.rayIntersects ? ", ray" : ", fallback") +
-                                (rr.blocked ? ", blocked" : ""));
-                flagged = true;
-                if (reachCancelOnFlag) e.setCancelled(true);
+                reachFlag = true;
+                reachDetail = "reach=" + DF2.format(reach) + ">" + DF2.format(allowed) +
+                        ", ping=" + ping + "ms" +
+                        (rr.rayIntersects ? ", ray" : ", fallback") +
+                        (rr.blocked ? ", blocked" : "");
             }
 
             // If the hit is literally blocked by blocks, treat it as suspicious for aura too.
@@ -142,7 +153,7 @@ public final class CombatListener implements Listener {
             }
 
             if (suspiciousAngle || suspiciousSwitch || suspiciousLos) {
-                double next = vl.addVl(p.getUniqueId(), CheckType.KILLAURA, auraVlAdd);
+                auraFlag = true;
                 StringBuilder details = new StringBuilder();
                 if (suspiciousAngle) {
                     details.append("angle=").append(DF2.format(angle)).append(">")
@@ -156,7 +167,7 @@ public final class CombatListener implements Listener {
                     if (details.length() > 0) details.append(", ");
                     details.append("blocked");
                 }
-                alert(p, "KILLAURA", next, details.toString());
+                auraDetail = details.toString();
                 flagged = true;
                 if (auraCancelOnFlag) e.setCancelled(true);
 
@@ -173,6 +184,23 @@ public final class CombatListener implements Listener {
 
             st.lastHitAt = now;
             st.lastTargetId = target.getUniqueId();
+        }
+
+        if (reachFlag) {
+            boolean combo = auraFlag;
+            double add = reachVlAdd * (combo ? reachComboWeight : reachSoloWeight);
+            double next = vl.addVl(p.getUniqueId(), CheckType.REACH, add);
+            alert(p, "REACH", next, reachDetail + (combo ? ", combo" : ", solo"));
+            flagged = true;
+            if (reachCancelOnFlag) e.setCancelled(true);
+        }
+
+        if (auraFlag) {
+            boolean combo = reachFlag;
+            double add = auraVlAdd * (combo ? auraComboWeight : auraSoloWeight);
+            double next = vl.addVl(p.getUniqueId(), CheckType.KILLAURA, add);
+            alert(p, "KILLAURA", next, auraDetail + (combo ? ", combo" : ", solo"));
+            flagged = true;
         }
 
         // Immediate setback-on-flag (your request)
@@ -203,6 +231,7 @@ public final class CombatListener implements Listener {
         for (Player online : Bukkit.getOnlinePlayers()) {
             online.sendMessage(msg);
         }
+        plugin.recordLastFlag(suspected, check, details);
         plugin.getLogger().info("[AC] " + suspected.getName() + " " + check + " VL=" + DF2.format(checkVl) + " (" + details + ")");
     }
 

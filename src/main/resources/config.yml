@@ -55,6 +55,9 @@ checks:
     ping_comp_cap_blocks: 0.30
     vl_add: 2.0
     cancel_on_flag: false
+    # When reach and aura flag together, increase certainty.
+    solo_weight: 0.90
+    combo_weight: 1.20
 
   killaura:
     enabled: true
@@ -62,6 +65,9 @@ checks:
     switch_window_ms: 250
     vl_add: 1.5
     cancel_on_flag: false
+    # When aura and reach flag together, increase certainty.
+    solo_weight: 0.90
+    combo_weight: 1.20
     check_line_of_sight: true
     # If true and line-of-sight is blocked, set the outgoing damage to 0.
     nullify_damage_on_blocked: true
@@ -116,6 +122,11 @@ checks:
     max_diamond_ore_per_window: 5
     vl_add: 2.5
 
+    # Relax false positives around tool behavior and custom worlds.
+    ignore_silk_touch: true
+    relax_on_fortune: true
+    exempt_worlds: []
+
     # World-environment overrides (NORMAL/NETHER/THE_END)
     worlds:
       normal:
@@ -159,8 +170,13 @@ checks:
     min_samples: 4
     min_move_ms: 25
     max_move_ms: 220
-    # Expected horizontal speed while actively using slow items.
-    max_use_item_bps: 2.25
+    # Per-item thresholds + buffer (continuous violation required)
+    sword_max_use_item_bps: 2.15
+    food_max_use_item_bps: 2.25
+    potion_max_use_item_bps: 2.30
+    sword_buffer_min: 2.0
+    food_buffer_min: 1.5
+    potion_buffer_min: 1.5
     grace_bps: 0.25
     vl_add: 1.4
 

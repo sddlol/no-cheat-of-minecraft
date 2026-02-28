@@ -33,6 +33,8 @@ public final class AntiCheatLitePlugin extends JavaPlugin {
 
     // Last known "safe" location (usually last on-ground spot). Used for setbacks.
     private final Map<UUID, Location> lastSafe = new ConcurrentHashMap<>();
+    private final Map<UUID, String> lastFlagReason = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> lastFlagAt = new ConcurrentHashMap<>();
 
     @Override
     public void onEnable() {
@@ -47,6 +49,8 @@ public final class AntiCheatLitePlugin extends JavaPlugin {
             violationManager.shutdown();
         }
         lastSafe.clear();
+        lastFlagReason.clear();
+        lastFlagAt.clear();
         getLogger().info("AntiCheatLite disabled");
     }
 
@@ -176,6 +180,12 @@ public final class AntiCheatLitePlugin extends JavaPlugin {
                     " scaffold=" + violationManager.getVl(id, CheckType.SCAFFOLD) +
                     " xray=" + violationManager.getVl(id, CheckType.XRAY) +
                     " noslow=" + violationManager.getVl(id, CheckType.NOSLOW)));
+            String last = getLastFlagReason(id);
+            long at = getLastFlagAt(id);
+            if (last != null && at > 0L) {
+                long sec = Math.max(0L, (System.currentTimeMillis() - at) / 1000L);
+                sender.sendMessage(color("&8  lastFlag=" + last + " &7(" + sec + "s ago)"));
+            }
             return true;
         }
 
@@ -225,5 +235,22 @@ public final class AntiCheatLitePlugin extends JavaPlugin {
 
     public void setChatDebugEnabled(boolean enabled) {
         this.chatDebugEnabled = enabled;
+    }
+
+    public void recordLastFlag(Player p, String check, String details) {
+        if (p == null) return;
+        UUID id = p.getUniqueId();
+        lastFlagReason.put(id, check + " - " + details);
+        lastFlagAt.put(id, System.currentTimeMillis());
+    }
+
+    public String getLastFlagReason(UUID id) {
+        return id == null ? null : lastFlagReason.get(id);
+    }
+
+    public long getLastFlagAt(UUID id) {
+        if (id == null) return 0L;
+        Long v = lastFlagAt.get(id);
+        return v == null ? 0L : v;
     }
 }

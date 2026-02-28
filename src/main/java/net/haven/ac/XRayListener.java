@@ -14,7 +14,10 @@ import org.bukkit.event.block.BlockBreakEvent;
 import java.text.DecimalFormat;
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -61,6 +64,10 @@ public final class XRayListener implements Listener {
     private final double pathMinAvgStepDistance;
     private final double pathVlAdd;
 
+    private final boolean ignoreSilkTouch;
+    private final boolean relaxOnFortune;
+    private final Set<String> exemptWorlds;
+
     private final Map<UUID, XRayState> states = new ConcurrentHashMap<>();
 
     private static final DecimalFormat DF2 = new DecimalFormat("0.00");
@@ -100,6 +107,16 @@ public final class XRayListener implements Listener {
         this.pathMinHiddenOres = cfg.getInt("checks.xray.path.min_hidden_ores", 6);
         this.pathMinAvgStepDistance = cfg.getDouble("checks.xray.path.min_avg_step_distance", 5.5);
         this.pathVlAdd = cfg.getDouble("checks.xray.path.vl_add", 1.5);
+
+        this.ignoreSilkTouch = cfg.getBoolean("checks.xray.ignore_silk_touch", true);
+        this.relaxOnFortune = cfg.getBoolean("checks.xray.relax_on_fortune", true);
+        this.exemptWorlds = new HashSet<String>();
+        List<String> worlds = cfg.getStringList("checks.xray.exempt_worlds");
+        if (worlds != null) {
+            for (String w : worlds) {
+                if (w != null && !w.trim().isEmpty()) exemptWorlds.add(w.trim().toLowerCase());
+            }
+        }
     }
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
@@ -115,11 +132,20 @@ public final class XRayListener implements Listener {
         Material type = b.getType();
         long now = System.currentTimeMillis();
 
+        if (b.getWorld() != null && exemptWorlds.contains(b.getWorld().getName().toLowerCase())) return;
+        if (ignoreSilkTouch && isSilkTouchTool(p)) return;
+
         XRayState st = states.computeIfAbsent(p.getUniqueId(), k -> new XRayState());
 
         int envMaxY = getMaxYByWorld(b.getWorld());
         double envRatioLimit = getMaxHiddenOreRatioByWorld(b.getWorld());
         int envDiamondLimit = getMaxDiamondPerWindowByWorld(b.getWorld());
+
+        int fortuneLevel = getFortuneLevel(p);
+        if (relaxOnFortune && fortuneLevel > 0) {
+            envRatioLimit += 0.03 * Math.min(3, fortuneLevel);
+            envDiamondLimit += Math.min(2, fortuneLevel);
+        }
 
         boolean underground = b.getY() <= envMaxY;
         if (underground && !isAirLike(type)) {
@@ -226,6 +252,24 @@ public final class XRayListener implements Listener {
         return n <= 0 ? 0.0 : (sum / n);
     }
 
+    private int getFortuneLevel(Player p) {
+        try {
+            if (p.getItemInHand() == null) return 0;
+            return p.getItemInHand().getEnchantmentLevel(org.bukkit.enchantments.Enchantment.LOOT_BONUS_BLOCKS);
+        } catch (Throwable ignored) {
+            return 0;
+        }
+    }
+
+    private boolean isSilkTouchTool(Player p) {
+        try {
+            if (p.getItemInHand() == null) return false;
+            return p.getItemInHand().getEnchantmentLevel(org.bukkit.enchantments.Enchantment.SILK_TOUCH) > 0;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
     private static boolean isAirLike(Material m) {
         if (m == null) return true;
         String n = m.name();
@@ -279,6 +323,7 @@ public final class XRayListener implements Listener {
         for (Player online : Bukkit.getOnlinePlayers()) {
             online.sendMessage(msg);
         }
+        plugin.recordLastFlag(suspected, check, details);
         plugin.getLogger().info("[AC] " + suspected.getName() + " " + check + " VL=" + DF2.format(checkVl) + " (" + details + ")");
     }
 

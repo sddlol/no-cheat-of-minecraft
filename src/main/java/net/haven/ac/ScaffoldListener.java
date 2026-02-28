@@ -199,6 +199,7 @@ public final class ScaffoldListener implements Listener {
         for (Player online : Bukkit.getOnlinePlayers()) {
             online.sendMessage(msg);
         }
+        plugin.recordLastFlag(suspected, check, details);
         plugin.getLogger().info("[AC] " + suspected.getName() + " " + check + " VL=" + DF2.format(checkVl) + " (" + details + ")");
     }
 

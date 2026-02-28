@@ -34,9 +34,16 @@ public final class NoSlowListener implements Listener {
     private final int minSamples;
     private final int minMoveMs;
     private final int maxMoveMs;
-    private final double maxUseItemBps;
+
+    private final double swordMaxUseItemBps;
+    private final double foodMaxUseItemBps;
+    private final double potionMaxUseItemBps;
     private final double graceBps;
     private final double vlAdd;
+
+    private final double swordBufferMin;
+    private final double foodBufferMin;
+    private final double potionBufferMin;
 
     private final Map<UUID, State> states = new ConcurrentHashMap<>();
 
@@ -59,9 +66,17 @@ public final class NoSlowListener implements Listener {
         this.minSamples = cfg.getInt("checks.noslow.min_samples", 4);
         this.minMoveMs = cfg.getInt("checks.noslow.min_move_ms", 25);
         this.maxMoveMs = cfg.getInt("checks.noslow.max_move_ms", 220);
-        this.maxUseItemBps = cfg.getDouble("checks.noslow.max_use_item_bps", 2.25);
+
+        double fallbackMax = cfg.getDouble("checks.noslow.max_use_item_bps", 2.25);
+        this.swordMaxUseItemBps = cfg.getDouble("checks.noslow.sword_max_use_item_bps", fallbackMax);
+        this.foodMaxUseItemBps = cfg.getDouble("checks.noslow.food_max_use_item_bps", fallbackMax);
+        this.potionMaxUseItemBps = cfg.getDouble("checks.noslow.potion_max_use_item_bps", fallbackMax);
         this.graceBps = cfg.getDouble("checks.noslow.grace_bps", 0.25);
         this.vlAdd = cfg.getDouble("checks.noslow.vl_add", 1.4);
+
+        this.swordBufferMin = cfg.getDouble("checks.noslow.sword_buffer_min", 2.0);
+        this.foodBufferMin = cfg.getDouble("checks.noslow.food_buffer_min", 1.5);
+        this.potionBufferMin = cfg.getDouble("checks.noslow.potion_buffer_min", 1.5);
     }
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
@@ -104,31 +119,41 @@ public final class NoSlowListener implements Listener {
 
         st.addSample(now, bps, sampleWindowMs);
 
-        boolean itemUsing = isUsingConfiguredSlowItem(p);
+        ItemGroup group = currentItemGroup(p);
+        boolean itemUsing = group != ItemGroup.NONE;
         boolean inConsumeGrace = now <= st.consumeGraceUntil;
 
         if (itemUsing && !inConsumeGrace && st.samplesSize() >= minSamples) {
             double avg = st.avg();
             double peak = st.peak();
-            double limit = maxUseItemBps + graceBps;
+            double limit = itemLimit(group) + graceBps;
 
             if (avg > limit || peak > limit + 0.35) {
+                st.addBuffer(group, 1.0);
+            } else {
+                st.decayBuffer(group, 0.2);
+            }
+
+            if (st.getBuffer(group) >= itemBufferMin(group)) {
                 double next = vl.addVl(p.getUniqueId(), CheckType.NOSLOW, vlAdd);
                 alert(p, "NOSLOW", next,
                         "avg=" + DF2.format(avg) +
                                 ", peak=" + DF2.format(peak) +
                                 ", limit=" + DF2.format(limit) +
-                                ", item=" + currentItemGroup(p));
+                                ", item=" + group.name().toLowerCase() +
+                                ", buf=" + DF2.format(st.getBuffer(group)));
             }
+        } else {
+            st.decayAllBuffers(0.1);
         }
 
         st.lastLoc = e.getTo().clone();
         st.lastMoveAt = now;
     }
 
-    private boolean isUsingConfiguredSlowItem(Player p) {
+    private ItemGroup currentItemGroup(Player p) {
         Material hand = p.getItemInHand() != null ? p.getItemInHand().getType() : null;
-        if (hand == null) return false;
+        if (hand == null) return ItemGroup.NONE;
 
         boolean usingState = false;
         try { if (p.isBlocking()) usingState = true; } catch (Throwable ignored) {}
@@ -140,23 +165,31 @@ public final class NoSlowListener implements Listener {
             } catch (Throwable ignored) {}
         }
 
-        if (!usingState) return false;
+        if (!usingState) return ItemGroup.NONE;
 
         String n = hand.name();
-        if (detectSword && n.endsWith("_SWORD")) return true;
-        if (detectPotion && (n.equals("POTION") || n.equals("SPLASH_POTION") || n.equals("LINGERING_POTION"))) return true;
-        if (detectFood && isFoodLike(hand)) return true;
-        return false;
+        if (detectSword && n.endsWith("_SWORD")) return ItemGroup.SWORD;
+        if (detectPotion && (n.equals("POTION") || n.equals("SPLASH_POTION") || n.equals("LINGERING_POTION"))) return ItemGroup.POTION;
+        if (detectFood && isFoodLike(hand)) return ItemGroup.FOOD;
+        return ItemGroup.NONE;
     }
 
-    private String currentItemGroup(Player p) {
-        Material hand = p.getItemInHand() != null ? p.getItemInHand().getType() : null;
-        if (hand == null) return "none";
-        String n = hand.name();
-        if (n.endsWith("_SWORD")) return "sword";
-        if (n.equals("POTION") || n.equals("SPLASH_POTION") || n.equals("LINGERING_POTION")) return "potion";
-        if (isFoodLike(hand)) return "food";
-        return n.toLowerCase();
+    private double itemLimit(ItemGroup group) {
+        switch (group) {
+            case SWORD: return swordMaxUseItemBps;
+            case FOOD: return foodMaxUseItemBps;
+            case POTION: return potionMaxUseItemBps;
+            default: return Double.MAX_VALUE;
+        }
+    }
+
+    private double itemBufferMin(ItemGroup group) {
+        switch (group) {
+            case SWORD: return swordBufferMin;
+            case FOOD: return foodBufferMin;
+            case POTION: return potionBufferMin;
+            default: return Double.MAX_VALUE;
+        }
     }
 
     private boolean isFoodLike(Material m) {
@@ -184,6 +217,7 @@ public final class NoSlowListener implements Listener {
         for (Player online : Bukkit.getOnlinePlayers()) {
             online.sendMessage(msg);
         }
+        plugin.recordLastFlag(suspected, check, details);
         plugin.getLogger().info("[AC] " + suspected.getName() + " " + check + " VL=" + DF2.format(checkVl) + " (" + details + ")");
     }
 
@@ -191,12 +225,18 @@ public final class NoSlowListener implements Listener {
         private org.bukkit.Location lastLoc;
         private long lastMoveAt;
         private long consumeGraceUntil;
+        private double swordBuffer;
+        private double foodBuffer;
+        private double potionBuffer;
         private final java.util.ArrayDeque<double[]> samples = new java.util.ArrayDeque<>();
 
         private State(org.bukkit.Location l, long t) {
             this.lastLoc = l;
             this.lastMoveAt = t;
             this.consumeGraceUntil = 0L;
+            this.swordBuffer = 0.0;
+            this.foodBuffer = 0.0;
+            this.potionBuffer = 0.0;
         }
 
         private void addSample(long now, double bps, int windowMs) {
@@ -218,5 +258,37 @@ public final class NoSlowListener implements Listener {
             for (double[] d : samples) if (d[1] > p) p = d[1];
             return p;
         }
+
+        private void addBuffer(ItemGroup g, double add) {
+            if (g == ItemGroup.SWORD) swordBuffer = Math.min(6.0, swordBuffer + add);
+            if (g == ItemGroup.FOOD) foodBuffer = Math.min(6.0, foodBuffer + add);
+            if (g == ItemGroup.POTION) potionBuffer = Math.min(6.0, potionBuffer + add);
+        }
+
+        private void decayBuffer(ItemGroup g, double d) {
+            if (g == ItemGroup.SWORD) swordBuffer = Math.max(0.0, swordBuffer - d);
+            if (g == ItemGroup.FOOD) foodBuffer = Math.max(0.0, foodBuffer - d);
+            if (g == ItemGroup.POTION) potionBuffer = Math.max(0.0, potionBuffer - d);
+        }
+
+        private void decayAllBuffers(double d) {
+            swordBuffer = Math.max(0.0, swordBuffer - d);
+            foodBuffer = Math.max(0.0, foodBuffer - d);
+            potionBuffer = Math.max(0.0, potionBuffer - d);
+        }
+
+        private double getBuffer(ItemGroup g) {
+            if (g == ItemGroup.SWORD) return swordBuffer;
+            if (g == ItemGroup.FOOD) return foodBuffer;
+            if (g == ItemGroup.POTION) return potionBuffer;
+            return 0.0;
+        }
+    }
+
+    private enum ItemGroup {
+        NONE,
+        SWORD,
+        FOOD,
+        POTION
     }
 }

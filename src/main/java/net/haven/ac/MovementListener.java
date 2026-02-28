@@ -442,6 +442,7 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
         for (Player online : Bukkit.getOnlinePlayers()) {
             online.sendMessage(msg);
         }
+        plugin.recordLastFlag(suspected, check, details);
         plugin.getLogger().info("[AC] " + suspected.getName() + " " + check + " VL=" + DF2.format(checkVl) + " (" + details + ")");
     }
 
