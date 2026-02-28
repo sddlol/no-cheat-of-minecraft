@@ -47,6 +47,13 @@ public final class ScaffoldListener implements Listener {
     private final double maxHoriz;
     private final double maxVert;
 
+    // Prediction-like checks (Grim-inspired lightweight constraints)
+    private final boolean predictionEnabled;
+    private final double predictionMaxReachBlocks;
+    private final double predictionMaxLookAngleDeg;
+    private final double predictionBufferMin;
+    private final double predictionBufferDecay;
+
     private final double vlAdd;
     private final boolean cancelOnFlag;
 
@@ -81,6 +88,12 @@ public final class ScaffoldListener implements Listener {
 
         this.maxHoriz = cfg.getDouble("checks.scaffold.max_horizontal_dist_blocks", 1.6);
         this.maxVert = cfg.getDouble("checks.scaffold.max_vertical_offset_blocks", 2.0);
+
+        this.predictionEnabled = cfg.getBoolean("checks.scaffold.prediction.enabled", true);
+        this.predictionMaxReachBlocks = cfg.getDouble("checks.scaffold.prediction.max_reach_blocks", 4.8);
+        this.predictionMaxLookAngleDeg = cfg.getDouble("checks.scaffold.prediction.max_look_angle_deg", 82.0);
+        this.predictionBufferMin = cfg.getDouble("checks.scaffold.prediction.buffer_min", 2.0);
+        this.predictionBufferDecay = cfg.getDouble("checks.scaffold.prediction.buffer_decay", 0.20);
 
         this.vlAdd = cfg.getDouble("checks.scaffold.vl_add", 2.0);
         this.cancelOnFlag = cfg.getBoolean("checks.scaffold.cancel_on_flag", true);
@@ -155,10 +168,40 @@ public final class ScaffoldListener implements Listener {
         st.lastPitch = pitch;
         st.lastAt = now;
 
-        if (tooStable || snapped) {
+        boolean impossiblePlacement = false;
+        String impossibleDetails = "";
+        if (predictionEnabled) {
+            Location eye = p.getEyeLocation();
+            org.bukkit.util.Vector look = eye.getDirection().normalize();
+            org.bukkit.util.Vector toBlock = placed.getLocation().add(0.5, 0.5, 0.5).toVector().subtract(eye.toVector());
+            double reachDist = toBlock.length();
+            double lookAngle = 180.0;
+            if (reachDist > 0.001) {
+                org.bukkit.util.Vector dir = toBlock.clone().normalize();
+                double dot = Math.max(-1.0, Math.min(1.0, look.dot(dir)));
+                lookAngle = Math.toDegrees(Math.acos(dot));
+            }
+
+            boolean badReach = reachDist > predictionMaxReachBlocks;
+            boolean badAngle = lookAngle > predictionMaxLookAngleDeg;
+
+            if (badReach || badAngle) {
+                st.predictionBuffer = Math.min(6.0, st.predictionBuffer + 1.0);
+            } else {
+                st.predictionBuffer = Math.max(0.0, st.predictionBuffer - predictionBufferDecay);
+            }
+
+            if (st.predictionBuffer >= predictionBufferMin) {
+                impossiblePlacement = true;
+                impossibleDetails = "pred(reach=" + DF2.format(reachDist) + ",angle=" + DF2.format(lookAngle) + ",buf=" + DF2.format(st.predictionBuffer) + ")";
+            }
+        }
+
+        if (tooStable || snapped || impossiblePlacement) {
             double next = vl.addVl(p.getUniqueId(), CheckType.SCAFFOLD, vlAdd);
             String details = "places=" + st.samples.size() + ", yawStd=" + DF2.format(yawStd) + ", pitchStd=" + DF2.format(pitchStd);
             if (snapped) details += ", snapped";
+            if (impossiblePlacement) details += ", " + impossibleDetails;
             alert(p, "SCAFFOLD", next, details);
 
             // "Annoy" punishment: break the just-placed block (Grim-style: make the cheat annoying to use).
@@ -242,6 +285,7 @@ public final class ScaffoldListener implements Listener {
         private long lastAt = 0L;
         private float lastYaw = 0f;
         private float lastPitch = 0f;
+        private double predictionBuffer = 0.0;
     }
 
     private static final class RotSample {

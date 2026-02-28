@@ -106,6 +106,15 @@ checks:
     # "Annoy" damage dealt to the player when flagged (2.0 = 1 heart).
     annoy_damage: 2.0
 
+    # Grim-inspired lightweight prediction constraints:
+    # reject placements that are too far from eye ray / too off-angle, with a buffer.
+    prediction:
+      enabled: true
+      max_reach_blocks: 4.8
+      max_look_angle_deg: 82.0
+      buffer_min: 2.0
+      buffer_decay: 0.20
+
   xray:
     enabled: true
     # Only count underground mining below this Y as xray signal.
