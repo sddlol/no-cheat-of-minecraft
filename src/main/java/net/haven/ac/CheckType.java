@@ -9,5 +9,6 @@ public enum CheckType {
     SCAFFOLD,
     MOVEMENT_SIM,
     NOFALL,
-    XRAY
+    XRAY,
+    NOSLOW
 }

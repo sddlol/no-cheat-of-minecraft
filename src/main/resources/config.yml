@@ -150,6 +150,20 @@ checks:
     # Avoid repeated punishment spam.
     cooldown_ms: 15000
 
+  noslow:
+    enabled: true
+    detect_sword: true
+    detect_food: true
+    detect_potion: true
+    sample_window_ms: 900
+    min_samples: 4
+    min_move_ms: 25
+    max_move_ms: 220
+    # Expected horizontal speed while actively using slow items.
+    max_use_item_bps: 2.25
+    grace_bps: 0.25
+    vl_add: 1.4
+
 
 movement_sim:
   enabled: true
