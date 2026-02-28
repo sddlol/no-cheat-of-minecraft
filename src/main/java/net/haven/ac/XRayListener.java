@@ -2,6 +2,7 @@ package net.haven.ac;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
@@ -18,10 +19,10 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Simple XRay heuristics inspired by common anti-cheat practice:
- * - focus on underground mining only
- * - focus on ores that were hidden (not air-exposed) before break
- * - evaluate ore ratio in a sliding window
+ * XRay heuristics (lightweight, no packets):
+ * 1) Hidden ore ratio in a mining window.
+ * 2) Hidden diamond burst in a short window.
+ * 3) Path anomaly: hidden ores found too far apart too quickly.
  */
 public final class XRayListener implements Listener {
 
@@ -41,6 +42,24 @@ public final class XRayListener implements Listener {
     private final int diamondWindowMs;
     private final int maxDiamondPerWindow;
     private final double vlAdd;
+
+    // Optional per-environment overrides (World.Environment.NORMAL/NETHER/THE_END)
+    private final int normalMaxY;
+    private final int netherMaxY;
+    private final int endMaxY;
+    private final double normalMaxHiddenOreRatio;
+    private final double netherMaxHiddenOreRatio;
+    private final double endMaxHiddenOreRatio;
+    private final int normalMaxDiamondPerWindow;
+    private final int netherMaxDiamondPerWindow;
+    private final int endMaxDiamondPerWindow;
+
+    // Path anomaly detector
+    private final boolean pathEnabled;
+    private final int pathWindowMs;
+    private final int pathMinHiddenOres;
+    private final double pathMinAvgStepDistance;
+    private final double pathVlAdd;
 
     private final Map<UUID, XRayState> states = new ConcurrentHashMap<>();
 
@@ -63,6 +82,24 @@ public final class XRayListener implements Listener {
         this.diamondWindowMs = cfg.getInt("checks.xray.diamond_window_ms", 60000);
         this.maxDiamondPerWindow = cfg.getInt("checks.xray.max_diamond_ore_per_window", 5);
         this.vlAdd = cfg.getDouble("checks.xray.vl_add", 2.5);
+
+        this.normalMaxY = cfg.getInt("checks.xray.worlds.normal.max_y", maxY);
+        this.netherMaxY = cfg.getInt("checks.xray.worlds.nether.max_y", maxY);
+        this.endMaxY = cfg.getInt("checks.xray.worlds.end.max_y", maxY);
+
+        this.normalMaxHiddenOreRatio = cfg.getDouble("checks.xray.worlds.normal.max_hidden_ore_ratio", maxHiddenOreRatio);
+        this.netherMaxHiddenOreRatio = cfg.getDouble("checks.xray.worlds.nether.max_hidden_ore_ratio", maxHiddenOreRatio * 1.40);
+        this.endMaxHiddenOreRatio = cfg.getDouble("checks.xray.worlds.end.max_hidden_ore_ratio", maxHiddenOreRatio);
+
+        this.normalMaxDiamondPerWindow = cfg.getInt("checks.xray.worlds.normal.max_diamond_ore_per_window", maxDiamondPerWindow);
+        this.netherMaxDiamondPerWindow = cfg.getInt("checks.xray.worlds.nether.max_diamond_ore_per_window", maxDiamondPerWindow + 2);
+        this.endMaxDiamondPerWindow = cfg.getInt("checks.xray.worlds.end.max_diamond_ore_per_window", maxDiamondPerWindow);
+
+        this.pathEnabled = cfg.getBoolean("checks.xray.path.enabled", true);
+        this.pathWindowMs = cfg.getInt("checks.xray.path.window_ms", 120000);
+        this.pathMinHiddenOres = cfg.getInt("checks.xray.path.min_hidden_ores", 6);
+        this.pathMinAvgStepDistance = cfg.getDouble("checks.xray.path.min_avg_step_distance", 5.5);
+        this.pathVlAdd = cfg.getDouble("checks.xray.path.vl_add", 1.5);
     }
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
@@ -80,7 +117,11 @@ public final class XRayListener implements Listener {
 
         XRayState st = states.computeIfAbsent(p.getUniqueId(), k -> new XRayState());
 
-        boolean underground = b.getY() <= maxY;
+        int envMaxY = getMaxYByWorld(b.getWorld());
+        double envRatioLimit = getMaxHiddenOreRatioByWorld(b.getWorld());
+        int envDiamondLimit = getMaxDiamondPerWindowByWorld(b.getWorld());
+
+        boolean underground = b.getY() <= envMaxY;
         if (underground && !isAirLike(type)) {
             st.undergroundBreakTimes.addLast(now);
             prune(st.undergroundBreakTimes, now, windowMs);
@@ -94,6 +135,11 @@ public final class XRayListener implements Listener {
         st.hiddenOreTimes.addLast(now);
         prune(st.hiddenOreTimes, now, windowMs);
 
+        if (pathEnabled) {
+            st.hiddenOrePath.addLast(new OrePoint(now, b.getX(), b.getY(), b.getZ()));
+            prunePath(st.hiddenOrePath, now, pathWindowMs);
+        }
+
         if (isDiamondOre(type)) {
             st.hiddenDiamondTimes.addLast(now);
             prune(st.hiddenDiamondTimes, now, diamondWindowMs);
@@ -104,22 +150,80 @@ public final class XRayListener implements Listener {
         int diaN = st.hiddenDiamondTimes.size();
         double ratio = mineN <= 0 ? 0.0 : (oreN * 1.0 / mineN);
 
-        boolean suspiciousRatio = mineN >= minUndergroundBreaks && oreN >= minHiddenOres && ratio > maxHiddenOreRatio;
-        boolean suspiciousDiamondBurst = diaN > maxDiamondPerWindow;
+        boolean suspiciousRatio = mineN >= minUndergroundBreaks && oreN >= minHiddenOres && ratio > envRatioLimit;
+        boolean suspiciousDiamondBurst = diaN > envDiamondLimit;
+        boolean suspiciousPath = pathEnabled && isSuspiciousPathByConfig(st.hiddenOrePath);
 
-        if (suspiciousRatio || suspiciousDiamondBurst) {
-            double next = vl.addVl(p.getUniqueId(), CheckType.XRAY, vlAdd);
+        if (suspiciousRatio || suspiciousDiamondBurst || suspiciousPath) {
+            double add = suspiciousPath && !suspiciousRatio && !suspiciousDiamondBurst ? pathVlAdd : vlAdd;
+            double next = vl.addVl(p.getUniqueId(), CheckType.XRAY, add);
+
             String details = "ore=" + oreN + "/" + mineN +
                     ", ratio=" + DF2.format(ratio) +
-                    ", dia1m=" + diaN +
-                    (suspiciousRatio ? ", ratioFlag" : "") +
-                    (suspiciousDiamondBurst ? ", diaBurst" : "");
+                    ", dia1m=" + diaN;
+            if (suspiciousRatio) details += ", ratioFlag";
+            if (suspiciousDiamondBurst) details += ", diaBurst";
+            if (suspiciousPath) {
+                details += ", path";
+                details += "(avgStep=" + DF2.format(avgStepDistance(st.hiddenOrePath)) + ")";
+            }
             alert(p, "XRAY", next, details);
         }
     }
 
+    private int getMaxYByWorld(World world) {
+        if (world == null) return maxY;
+        World.Environment env = world.getEnvironment();
+        if (env == World.Environment.NETHER) return netherMaxY;
+        if (env == World.Environment.THE_END) return endMaxY;
+        return normalMaxY;
+    }
+
+    private double getMaxHiddenOreRatioByWorld(World world) {
+        if (world == null) return maxHiddenOreRatio;
+        World.Environment env = world.getEnvironment();
+        if (env == World.Environment.NETHER) return netherMaxHiddenOreRatio;
+        if (env == World.Environment.THE_END) return endMaxHiddenOreRatio;
+        return normalMaxHiddenOreRatio;
+    }
+
+    private int getMaxDiamondPerWindowByWorld(World world) {
+        if (world == null) return maxDiamondPerWindow;
+        World.Environment env = world.getEnvironment();
+        if (env == World.Environment.NETHER) return netherMaxDiamondPerWindow;
+        if (env == World.Environment.THE_END) return endMaxDiamondPerWindow;
+        return normalMaxDiamondPerWindow;
+    }
+
+    private boolean isSuspiciousPathByConfig(Deque<OrePoint> path) {
+        if (path.size() < pathMinHiddenOres) return false;
+        return avgStepDistance(path) >= pathMinAvgStepDistance;
+    }
+
     private void prune(Deque<Long> q, long now, int winMs) {
         while (!q.isEmpty() && (now - q.peekFirst()) > winMs) q.removeFirst();
+    }
+
+    private void prunePath(Deque<OrePoint> q, long now, int winMs) {
+        while (!q.isEmpty() && (now - q.peekFirst().t) > winMs) q.removeFirst();
+    }
+
+    private static double avgStepDistance(Deque<OrePoint> path) {
+        if (path.size() < 2) return 0.0;
+        OrePoint prev = null;
+        double sum = 0.0;
+        int n = 0;
+        for (OrePoint cur : path) {
+            if (prev != null) {
+                double dx = cur.x - prev.x;
+                double dy = cur.y - prev.y;
+                double dz = cur.z - prev.z;
+                sum += Math.sqrt(dx * dx + dy * dy + dz * dz);
+                n++;
+            }
+            prev = cur;
+        }
+        return n <= 0 ? 0.0 : (sum / n);
     }
 
     private static boolean isAirLike(Material m) {
@@ -182,5 +286,20 @@ public final class XRayListener implements Listener {
         private final Deque<Long> undergroundBreakTimes = new ArrayDeque<>();
         private final Deque<Long> hiddenOreTimes = new ArrayDeque<>();
         private final Deque<Long> hiddenDiamondTimes = new ArrayDeque<>();
+        private final Deque<OrePoint> hiddenOrePath = new ArrayDeque<>();
+    }
+
+    private static final class OrePoint {
+        private final long t;
+        private final int x;
+        private final int y;
+        private final int z;
+
+        private OrePoint(long t, int x, int y, int z) {
+            this.t = t;
+            this.x = x;
+            this.y = y;
+            this.z = z;
+        }
     }
 }

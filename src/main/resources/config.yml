@@ -114,6 +114,30 @@ checks:
     max_diamond_ore_per_window: 5
     vl_add: 2.5
 
+    # World-environment overrides (NORMAL/NETHER/THE_END)
+    worlds:
+      normal:
+        max_y: 48
+        max_hidden_ore_ratio: 0.28
+        max_diamond_ore_per_window: 5
+      nether:
+        max_y: 48
+        # Nether ore distribution differs; keep this looser.
+        max_hidden_ore_ratio: 0.40
+        max_diamond_ore_per_window: 7
+      end:
+        max_y: 48
+        max_hidden_ore_ratio: 0.28
+        max_diamond_ore_per_window: 5
+
+    # Path anomaly detector: hidden ores found too far apart in short time.
+    path:
+      enabled: true
+      window_ms: 120000
+      min_hidden_ores: 6
+      min_avg_step_distance: 5.5
+      vl_add: 1.5
+
 
 movement_sim:
   enabled: true
