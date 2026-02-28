@@ -31,8 +31,9 @@ checks:
     min_samples: 3
     min_move_ms: 35
     max_move_ms: 220
-    grace_bps: 0.45
-    peak_slack_bps: 1.2
+    # Slightly looser to reduce lag/sprint-jump false positives.
+    grace_bps: 0.55
+    peak_slack_bps: 1.35
 
     # legacy (kept for old configs; no longer used by default)
     base_threshold_bps: 8.0
@@ -48,9 +49,10 @@ checks:
 
   reach:
     enabled: true
-    base_blocks: 3.20
+    # Slightly tighter baseline, still keeps ping compensation.
+    base_blocks: 3.15
     ping_comp_blocks_per_ms: 0.0015
-    ping_comp_cap_blocks: 0.35
+    ping_comp_cap_blocks: 0.30
     vl_add: 2.0
     cancel_on_flag: false
 
@@ -165,6 +167,8 @@ movement_sim:
   min_samples: 6
   min_dt_ms: 20
   max_dt_ms: 220
+  # Grim-like item-use slowdown factor (vanilla hard slow is ~0.2, we keep safer 0.35).
+  use_item_mult: 0.35
   violation_add: 1.0
   peak_violation_add: 2.5
 

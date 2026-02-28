@@ -50,6 +50,29 @@ public final class MovementSimulator {
         return m != Material.AIR && m.isSolid();
     }
 
+    private static boolean isUsingSlowItem(Player p) {
+        if (p == null) return false;
+        // 1.8 blocking
+        try {
+            if (p.isBlocking()) return true;
+        } catch (Throwable ignored) {}
+
+        // 1.9+ hand raised / item use state
+        try {
+            Method m = p.getClass().getMethod("isHandRaised");
+            Object o = m.invoke(p);
+            if (o instanceof Boolean && (Boolean) o) return true;
+        } catch (Throwable ignored) {}
+
+        try {
+            Method m = p.getClass().getMethod("isHandRaised", boolean.class);
+            Object o = m.invoke(p, true);
+            if (o instanceof Boolean && (Boolean) o) return true;
+        } catch (Throwable ignored) {}
+
+        return false;
+    }
+
     public static double allowedHorizontalBps(Player p, boolean onGround, boolean sprinting, boolean sneaking, Config cfg) {
         if (shouldSkip(p)) return Double.POSITIVE_INFINITY;
 
@@ -71,6 +94,7 @@ public final class MovementSimulator {
 
         if (sprinting) bps *= cfg.sprintMult;
         if (sneaking) bps *= cfg.sneakMult;
+        if (isUsingSlowItem(p)) bps *= cfg.useItemMult;
 
         int speedLv = getPotionLevel(p, "SPEED");
         if (speedLv > 0) {
@@ -99,6 +123,7 @@ public final class MovementSimulator {
         public double airMult = 1.08;
         public double headHitAirMult = 1.15;
         public double speedPotionPerLevel = 0.20;
+        public double useItemMult = 0.35;
         public double specialEnvLooseMult = 1.35;
         public double baseSlackBps = 0.75;
         public double peakSlackBps = 1.25;

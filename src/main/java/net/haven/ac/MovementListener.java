@@ -66,6 +66,7 @@ public final class MovementListener implements Listener {
     private final double simAirMult;
     private final double simHeadHitAirMult;
     private final double simSpeedPotionPerLevel;
+    private final double simUseItemMult;
     private final double simSpecialEnvLooseMult;
     private final double simBaseSlackBps;
 
@@ -132,6 +133,7 @@ private final boolean flyEnabled;
         this.simAirMult = getDoubleCompat(cfg, "checks.movement_sim.air_mult", "movement_sim.air_mult", 1.08);
         this.simHeadHitAirMult = getDoubleCompat(cfg, "checks.movement_sim.head_hit_air_mult", "movement_sim.head_hit_air_mult", 1.15);
         this.simSpeedPotionPerLevel = getDoubleCompat(cfg, "checks.movement_sim.speed_potion_per_level", "movement_sim.speed_potion_per_level", 0.20);
+        this.simUseItemMult = getDoubleCompat(cfg, "checks.movement_sim.use_item_mult", "movement_sim.use_item_mult", 0.35);
         this.simSpecialEnvLooseMult = getDoubleCompat(cfg, "checks.movement_sim.special_env_loose_mult", "movement_sim.special_env_loose_mult", 1.35);
         this.simBaseSlackBps = getDoubleCompat(cfg, "checks.movement_sim.base_slack_bps", "movement_sim.base_slack_bps", 0.75);
 
@@ -319,6 +321,7 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
                     sc.airMult = simAirMult;
                     sc.headHitAirMult = simHeadHitAirMult;
                     sc.speedPotionPerLevel = simSpeedPotionPerLevel;
+                    sc.useItemMult = simUseItemMult;
                     sc.specialEnvLooseMult = simSpecialEnvLooseMult;
                     sc.baseSlackBps = simBaseSlackBps;
                     sc.peakSlackBps = simPeakSlackBps;

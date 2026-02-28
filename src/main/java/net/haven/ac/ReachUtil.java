@@ -92,21 +92,28 @@ public final class ReachUtil {
      */
     public static ReachResult computeReach(Player attacker, LivingEntity target) {
         if (attacker == null || target == null) return new ReachResult(0.0, false, false);
-        Location eye = attacker.getEyeLocation();
-        // Approximate: use target eye location for living entities.
-        Location tloc;
-        try {
-            tloc = target.getEyeLocation();
-        } catch (Throwable ignored) {
-            tloc = target.getLocation();
-        }
-        double dist = eye.getWorld() != null && tloc.getWorld() != null && eye.getWorld().equals(tloc.getWorld())
-                ? eye.distance(tloc)
-                : 0.0;
 
-        boolean blocked = !Compat.hasLineOfSight(attacker, target);
-        // We don't do full ray/hitbox math here; treat "not blocked" as intersects.
-        boolean intersects = !blocked;
+        Location eye = attacker.getEyeLocation();
+        double dist = distanceToTarget(attacker, target);
+
+        // Through-wall signal prefers ray test; falls back to hasLineOfSight behavior.
+        boolean blocked = isThroughWall(attacker, target, dist + 0.5);
+
+        // If we have a finite distance and it's not blocked, treat as a good hit-line intersection.
+        boolean intersects = dist < Double.MAX_VALUE && !blocked;
+        if (!Double.isFinite(dist) || dist == Double.MAX_VALUE) {
+            // Fallback if hitbox API failed badly.
+            Location tloc;
+            try {
+                tloc = target.getEyeLocation();
+            } catch (Throwable ignored) {
+                tloc = target.getLocation();
+            }
+            dist = eye.getWorld() != null && tloc.getWorld() != null && eye.getWorld().equals(tloc.getWorld())
+                    ? eye.distance(tloc)
+                    : 0.0;
+        }
+
         return new ReachResult(dist, blocked, intersects);
     }
 
