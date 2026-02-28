@@ -30,6 +30,8 @@ public final class AntiCheatLitePlugin extends JavaPlugin {
     private NoFallListener noFallListener;
     private XRayListener xRayListener;
     private NoSlowListener noSlowListener;
+    private VelocityListener velocityListener;
+    private BadPacketsListener badPacketsListener;
 
     // Last known "safe" location (usually last on-ground spot). Used for setbacks.
     private final Map<UUID, Location> lastSafe = new ConcurrentHashMap<>();
@@ -118,6 +120,18 @@ public final class AntiCheatLitePlugin extends JavaPlugin {
         }
         noSlowListener = new NoSlowListener(this, violationManager, cfg);
         Bukkit.getPluginManager().registerEvents(noSlowListener, this);
+
+        if (velocityListener != null) {
+            org.bukkit.event.HandlerList.unregisterAll(velocityListener);
+        }
+        velocityListener = new VelocityListener(this, violationManager, cfg);
+        Bukkit.getPluginManager().registerEvents(velocityListener, this);
+
+        if (badPacketsListener != null) {
+            org.bukkit.event.HandlerList.unregisterAll(badPacketsListener);
+        }
+        badPacketsListener = new BadPacketsListener(this, violationManager, cfg);
+        Bukkit.getPluginManager().registerEvents(badPacketsListener, this);
     }
 
     /** Update safe location for setbacks. */
@@ -179,7 +193,9 @@ public final class AntiCheatLitePlugin extends JavaPlugin {
                     " click=" + violationManager.getVl(id, CheckType.AUTOCLICKER) +
                     " scaffold=" + violationManager.getVl(id, CheckType.SCAFFOLD) +
                     " xray=" + violationManager.getVl(id, CheckType.XRAY) +
-                    " noslow=" + violationManager.getVl(id, CheckType.NOSLOW)));
+                    " noslow=" + violationManager.getVl(id, CheckType.NOSLOW) +
+                    " velocity=" + violationManager.getVl(id, CheckType.VELOCITY) +
+                    " badpackets=" + violationManager.getVl(id, CheckType.BADPACKETS)));
             String last = getLastFlagReason(id);
             long at = getLastFlagAt(id);
             if (last != null && at > 0L) {

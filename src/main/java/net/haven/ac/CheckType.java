@@ -10,5 +10,7 @@ public enum CheckType {
     MOVEMENT_SIM,
     NOFALL,
     XRAY,
-    NOSLOW
+    NOSLOW,
+    VELOCITY,
+    BADPACKETS
 }

@@ -93,6 +93,16 @@ checks:
         max_norm_remainder: 0.12
         vl_add: 0.8
 
+      # Very low rotation "jerk" while still moving aim can indicate assisted smoothing.
+      jerk:
+        enabled: true
+        min_samples: 6
+        max_avg_yaw_jerk_deg: 0.45
+        max_avg_pitch_jerk_deg: 0.30
+        min_avg_yaw_delta_deg: 2.00
+        min_avg_pitch_delta_deg: 0.30
+        vl_add: 0.8
+
   autoclicker:
     enabled: true
     window_ms: 1000
@@ -210,6 +220,31 @@ checks:
     food_buffer_min: 1.5
     potion_buffer_min: 1.5
     vl_add: 1.4
+
+  velocity:
+    enabled: true
+    max_pending_after_hit_ms: 250
+    sample_window_ms: 650
+    eval_delay_ms: 220
+    min_samples: 3
+    min_expected_horizontal: 0.10
+    # moved / expected ratio below this value is suspicious
+    min_take_ratio: 0.20
+    vl_add: 2.0
+    cancel_on_flag: false
+
+  badpackets:
+    enabled: true
+    max_abs_coord: 30000000.0
+    invalid_pitch_limit: 90.0
+    invalid_pitch_vl_add: 3.0
+    snap_window_ms: 120
+    snap_yaw_deg: 220.0
+    snap_pitch_deg: 120.0
+    snap_buffer_min: 2.0
+    snap_buffer_decay: 0.25
+    snap_vl_add: 1.2
+    cancel_on_flag: true
 
 
 movement_sim:

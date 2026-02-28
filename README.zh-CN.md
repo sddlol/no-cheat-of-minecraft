@@ -13,8 +13,9 @@
 - ✅ 跨版本支持：**Minecraft 1.8.x ~ 1.21.x**
 - ✅ 单 Jar 部署
 - ✅ 核心检测：
-  - 移动：Speed / Fly / Movement Sim / Blink / NoFall
+  - 移动：Speed / Fly / Movement Sim / Blink / NoFall / Velocity
   - 战斗：Reach / KillAura / AutoClicker / NoSlow
+  - 协议健全性：BadPackets
   - 搭路：Scaffold
   - 挖矿：XRay
 - ✅ Setback 回拉 + 惩罚流程（可配置）
@@ -38,6 +39,13 @@
 ### Scaffold（预测约束）
 - 旋转稳定性 + 突变
 - 轻量预测约束：放置距离 / 视线夹角 + buffer
+
+### Velocity / AntiKB
+- 在短窗口内比较预期击退水平速度与实际吃到的位移
+- 使用比例 + 样本缓冲，减少误报
+
+### BadPackets（轻量）
+- 无效 pitch / 非有限数值 / 异常转头突变模式
 
 ### XRay（统计 + 路径）
 - 隐藏矿比例

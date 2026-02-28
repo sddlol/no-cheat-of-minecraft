@@ -72,6 +72,14 @@ public final class CombatListener implements Listener {
     private final double auraGcdMaxNormRemainder;
     private final double auraGcdVlAdd;
 
+    private final boolean auraJerkEnabled;
+    private final int auraJerkMinSamples;
+    private final double auraJerkMaxAvgYawDeg;
+    private final double auraJerkMaxAvgPitchDeg;
+    private final double auraJerkMinAvgYawDeltaDeg;
+    private final double auraJerkMinAvgPitchDeltaDeg;
+    private final double auraJerkVlAdd;
+
     private final PunishAction punishAction;
     private final double punishThreshold;
     private final boolean setbackOnFlag;
@@ -122,6 +130,14 @@ public final class CombatListener implements Listener {
         this.auraGcdMinStepDeg = cfg.getDouble("checks.killaura.smooth_rotation.gcd.min_step_deg", 0.06);
         this.auraGcdMaxNormRemainder = cfg.getDouble("checks.killaura.smooth_rotation.gcd.max_norm_remainder", 0.12);
         this.auraGcdVlAdd = cfg.getDouble("checks.killaura.smooth_rotation.gcd.vl_add", 0.8);
+
+        this.auraJerkEnabled = cfg.getBoolean("checks.killaura.smooth_rotation.jerk.enabled", true);
+        this.auraJerkMinSamples = cfg.getInt("checks.killaura.smooth_rotation.jerk.min_samples", 6);
+        this.auraJerkMaxAvgYawDeg = cfg.getDouble("checks.killaura.smooth_rotation.jerk.max_avg_yaw_jerk_deg", 0.45);
+        this.auraJerkMaxAvgPitchDeg = cfg.getDouble("checks.killaura.smooth_rotation.jerk.max_avg_pitch_jerk_deg", 0.30);
+        this.auraJerkMinAvgYawDeltaDeg = cfg.getDouble("checks.killaura.smooth_rotation.jerk.min_avg_yaw_delta_deg", 2.00);
+        this.auraJerkMinAvgPitchDeltaDeg = cfg.getDouble("checks.killaura.smooth_rotation.jerk.min_avg_pitch_delta_deg", 0.30);
+        this.auraJerkVlAdd = cfg.getDouble("checks.killaura.smooth_rotation.jerk.vl_add", 0.8);
 
         this.punishAction = PunishAction.fromString(cfg.getString("punishments.action", "SETBACK"));
         this.punishThreshold = cfg.getDouble("punishments.threshold_vl", 6.0);
@@ -192,6 +208,7 @@ public final class CombatListener implements Listener {
 
             boolean suspiciousSmooth = false;
             boolean suspiciousGcd = false;
+            boolean suspiciousJerk = false;
             double yawStd = 999.0;
             double pitchStd = 999.0;
             double yawAvg = 0.0;
@@ -200,6 +217,8 @@ public final class CombatListener implements Listener {
             double gcdPitchStep = 0.0;
             double gcdYawRem = 1.0;
             double gcdPitchRem = 1.0;
+            double yawJerkAvg = 999.0;
+            double pitchJerkAvg = 999.0;
             if (auraSmoothEnabled) {
                 float yawNow = normalizeYaw(eye.getYaw());
                 float pitchNow = eye.getPitch();
@@ -236,13 +255,22 @@ public final class CombatListener implements Listener {
                         boolean pitchQuant = gcdPitchStep >= auraGcdMinStepDeg && gcdPitchRem <= auraGcdMaxNormRemainder;
                         suspiciousGcd = yawQuant || pitchQuant;
                     }
+
+                    if (auraJerkEnabled && st.rotDeltas.size() >= auraJerkMinSamples && suspiciousSmooth) {
+                        yawJerkAvg = avgJerk(st.rotDeltas, true);
+                        pitchJerkAvg = avgJerk(st.rotDeltas, false);
+
+                        boolean lowJerk = yawJerkAvg <= auraJerkMaxAvgYawDeg && pitchJerkAvg <= auraJerkMaxAvgPitchDeg;
+                        boolean enoughBase = yawAvg >= auraJerkMinAvgYawDeltaDeg || pitchAvg >= auraJerkMinAvgPitchDeltaDeg;
+                        suspiciousJerk = lowJerk && enoughBase;
+                    }
                 }
                 st.lastYaw = yawNow;
                 st.lastPitch = pitchNow;
                 st.hasLastRot = true;
             }
 
-            if (suspiciousAngle || suspiciousSwitch || suspiciousLos || suspiciousSmooth || suspiciousGcd) {
+            if (suspiciousAngle || suspiciousSwitch || suspiciousLos || suspiciousSmooth || suspiciousGcd || suspiciousJerk) {
                 auraFlag = true;
                 StringBuilder details = new StringBuilder();
                 if (suspiciousAngle) {
@@ -274,6 +302,12 @@ public final class CombatListener implements Listener {
                             .append(",yRem=").append(DF2.format(gcdYawRem))
                             .append(",pRem=").append(DF2.format(gcdPitchRem)).append(")");
                     auraBaseAdd += auraGcdVlAdd;
+                }
+                if (suspiciousJerk) {
+                    if (details.length() > 0) details.append(", ");
+                    details.append("jerk(y=").append(DF2.format(yawJerkAvg))
+                            .append(",p=").append(DF2.format(pitchJerkAvg)).append(")");
+                    auraBaseAdd += auraJerkVlAdd;
                 }
 
                 auraDetail = details.toString();
@@ -397,6 +431,24 @@ public final class CombatListener implements Listener {
         Collections.sort(vals);
         int idx = (int) Math.floor((vals.size() - 1) * 0.2);
         return vals.get(Math.max(0, idx));
+    }
+
+    private static double avgJerk(Deque<RotDelta> samples, boolean yaw) {
+        if (samples.size() < 3) return 9999.0;
+        RotDelta prev = null;
+        double sum = 0.0;
+        int n = 0;
+        for (RotDelta cur : samples) {
+            if (prev != null) {
+                double a = yaw ? prev.yawDelta : prev.pitchDelta;
+                double b = yaw ? cur.yawDelta : cur.pitchDelta;
+                sum += Math.abs(b - a);
+                n++;
+            }
+            prev = cur;
+        }
+        if (n <= 0) return 9999.0;
+        return sum / n;
     }
 
     private static double normalizedRemainder(Deque<RotDelta> samples, boolean yaw, double step) {

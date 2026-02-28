@@ -13,8 +13,9 @@ Current direction: keep **1.8.x ~ 1.21.x** compatibility while moving more check
 - ✅ Cross-version support: **Minecraft 1.8.x ~ 1.21.x**
 - ✅ Single jar deployment
 - ✅ Core checks:
-  - Movement: Speed / Fly / Movement Sim / Blink / NoFall
+  - Movement: Speed / Fly / Movement Sim / Blink / NoFall / Velocity
   - Combat: Reach / KillAura / AutoClicker / NoSlow
+  - Packet sanity: BadPackets
   - Build: Scaffold
   - Mining: XRay
 - ✅ Setback and punish pipeline (configurable)
@@ -38,6 +39,13 @@ Current direction: keep **1.8.x ~ 1.21.x** compatibility while moving more check
 ### Scaffold (prediction constraints)
 - rotation stability + snap
 - lightweight prediction limits: place reach / look angle + buffer
+
+### Velocity / AntiKB
+- compare expected horizontal knockback vs actual taken movement in a short window
+- ratio + sample buffer to reduce false positives
+
+### BadPackets (lightweight)
+- invalid pitch / non-finite values / abnormal snap rotation patterns
 
 ### XRay (stats + path)
 - hidden ore ratio
