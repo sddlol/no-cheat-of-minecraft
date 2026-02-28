@@ -13,7 +13,7 @@
 - ✅ 跨版本支持：**Minecraft 1.8.x ~ 1.21.x**
 - ✅ 单 Jar 部署
 - ✅ 核心检测：
-  - 移动：Speed / Fly / Movement Sim / Blink / NoFall / Velocity
+  - 移动：Speed / Fly / Movement Sim / Blink / NoFall / Velocity / Timer / InvMove
   - 战斗：Reach / KillAura / AutoClicker / NoSlow
   - 协议健全性：BadPackets
   - 搭路：Scaffold
@@ -29,6 +29,7 @@
 ### Movement / NoSlow（模拟化）
 - 基于简化 vanilla 规则估算允许移动（地面/空中/药水/环境/使用物品）
 - 使用 **offset + buffer**，而不是单次越线即判
+- 可选惩罚：超出模拟范围时强制拉回到模拟位置
 
 ### 战斗模型（Reach + KillAura）
 - Reach 支持延迟回溯（目标历史位置），降低高 ping 误报
@@ -43,8 +44,12 @@
 - 轻量预测约束：放置距离 / 视线夹角 + buffer
 
 ### Velocity / AntiKB
-- 在短窗口内比较预期击退水平速度与实际吃到的位移
+- 在短窗口内比较预期击退的水平+垂直速度与实际吃到的位移
 - 使用比例 + 样本缓冲，减少误报
+
+### Timer / InvMove
+- timer：检测持续异常快的移动节奏（带缓冲）
+- invmove：检测打开容器界面时异常移动
 
 ### BadPackets（轻量）
 - 无效 pitch / 非有限数值 / 异常转头突变模式
@@ -108,6 +113,9 @@
 - `checks.killaura.*`
 - `checks.reach.rewind_*`
 - `checks.noslow.*`
+- `checks.velocity.*`
+- `checks.timer.*`
+- `checks.invmove.*`
 - `checks.scaffold.prediction.*`
 - `checks.xray.*`
 - `checks.vl_reset_guard.*`
@@ -135,8 +143,8 @@ target/*.jar
 ## 发布（Tag）
 
 ```bash
-git tag -a v1.9.0 -m "Release v1.9.0"
-git push origin v1.9.0
+git tag -a v1.10.0 -m "Release v1.10.0"
+git push origin v1.10.0
 ```
 
 ---

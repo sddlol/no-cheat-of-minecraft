@@ -13,7 +13,7 @@ Current direction: keep **1.8.x ~ 1.21.x** compatibility while moving more check
 - ✅ Cross-version support: **Minecraft 1.8.x ~ 1.21.x**
 - ✅ Single jar deployment
 - ✅ Core checks:
-  - Movement: Speed / Fly / Movement Sim / Blink / NoFall / Velocity
+  - Movement: Speed / Fly / Movement Sim / Blink / NoFall / Velocity / Timer / InvMove
   - Combat: Reach / KillAura / AutoClicker / NoSlow
   - Packet sanity: BadPackets
   - Build: Scaffold
@@ -29,6 +29,7 @@ Current direction: keep **1.8.x ~ 1.21.x** compatibility while moving more check
 ### Movement / NoSlow (simulation-style)
 - Estimate allowed movement from simplified vanilla rules (ground/air/potion/environment/item-use)
 - Use **offset + buffer** instead of single-tick thresholding
+- Optional punish: if movement exceeds simulation range, force pull to the simulated location
 
 ### Combat model (Reach + KillAura)
 - Reach supports latency rewind (target history) to reduce high-ping false positives
@@ -43,8 +44,12 @@ Current direction: keep **1.8.x ~ 1.21.x** compatibility while moving more check
 - lightweight prediction limits: place reach / look angle + buffer
 
 ### Velocity / AntiKB
-- compare expected horizontal knockback vs actual taken movement in a short window
+- compare expected horizontal+vertical knockback vs actual taken movement in a short window
 - ratio + sample buffer to reduce false positives
+
+### Timer / InvMove
+- timer: detects sustained too-fast movement cadence with buffering
+- invmove: detects movement while container GUI is open
 
 ### BadPackets (lightweight)
 - invalid pitch / non-finite values / abnormal snap rotation patterns
@@ -108,6 +113,9 @@ Focus sections:
 - `checks.killaura.*`
 - `checks.reach.rewind_*`
 - `checks.noslow.*`
+- `checks.velocity.*`
+- `checks.timer.*`
+- `checks.invmove.*`
 - `checks.scaffold.prediction.*`
 - `checks.xray.*`
 - `checks.vl_reset_guard.*`
@@ -135,8 +143,8 @@ target/*.jar
 ## Release (Tag)
 
 ```bash
-git tag -a v1.9.0 -m "Release v1.9.0"
-git push origin v1.9.0
+git tag -a v1.10.0 -m "Release v1.10.0"
+git push origin v1.10.0
 ```
 
 ---

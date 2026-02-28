@@ -58,6 +58,8 @@ public final class MovementListener implements Listener {
     private final int simMaxMoveMs;
     private final double simGraceBps;
     private final double simPeakSlackBps;
+    private final boolean simSetbackToSimulated;
+    private final double simSetbackExtraSlackBps;
 
     // MovementSimulator params
     private final double simSpeedAttrToBps;
@@ -126,6 +128,8 @@ private final boolean flyEnabled;
         this.simMaxMoveMs = getIntCompat(cfg, "checks.movement_sim.max_move_ms", "movement_sim.max_dt_ms", 220);
         this.simGraceBps = getDoubleCompat(cfg, "checks.movement_sim.grace_bps", "movement_sim.base_slack_bps", 0.75);
         this.simPeakSlackBps = getDoubleCompat(cfg, "checks.movement_sim.peak_slack_bps", "movement_sim.peak_slack_bps", 1.25);
+        this.simSetbackToSimulated = getBooleanCompat(cfg, "checks.movement_sim.setback_to_simulated.enabled", "movement_sim.setback_to_simulated.enabled", true);
+        this.simSetbackExtraSlackBps = getDoubleCompat(cfg, "checks.movement_sim.setback_to_simulated.extra_slack_bps", "movement_sim.setback_to_simulated.extra_slack_bps", 0.20);
 
         this.simSpeedAttrToBps = getDoubleCompat(cfg, "checks.movement_sim.speed_attr_to_bps", "movement_sim.speed_attr_to_bps", 43.17);
         this.simSprintMult = getDoubleCompat(cfg, "checks.movement_sim.sprint_mult", "movement_sim.sprint_mult", 1.30);
@@ -338,6 +342,16 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
                             double next = vl.addVl(p.getUniqueId(), CheckType.MOVEMENT_SIM, simVlAdd);
                             alert(p, "MOVE_SIM", next,
                                     "avg=" + DF2.format(avg) + ",peak=" + DF2.format(peak) + ",allow=" + DF2.format(allowed));
+
+                            if (simSetbackToSimulated && plugin.canPunish()) {
+                                Location simLoc = computeSimulatedLocation(st.lastLoc, to, dtMs, allowed + simSetbackExtraSlackBps);
+                                if (simLoc != null) {
+                                    simLoc.setYaw(to.getYaw());
+                                    simLoc.setPitch(to.getPitch());
+                                    e.setTo(simLoc);
+                                }
+                            }
+
                             flaggedThisMove = true;
                         }
                     }
@@ -417,6 +431,28 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
 
         st.lastLoc = to.clone();
         st.lastMoveAt = now;
+    }
+
+    private Location computeSimulatedLocation(Location from, Location to, long dtMs, double allowedBps) {
+        if (from == null || to == null || from.getWorld() == null || to.getWorld() == null) return null;
+        if (!from.getWorld().equals(to.getWorld())) return null;
+        if (dtMs <= 0L) return to.clone();
+
+        double dx = to.getX() - from.getX();
+        double dz = to.getZ() - from.getZ();
+        double horizontal = Math.sqrt(dx * dx + dz * dz);
+
+        double maxHorizontal = Math.max(0.0, allowedBps) * (dtMs / 1000.0);
+        if (horizontal <= 0.000001 || horizontal <= maxHorizontal) {
+            return to.clone();
+        }
+
+        double scale = maxHorizontal / horizontal;
+        Location out = from.clone();
+        out.setX(from.getX() + dx * scale);
+        out.setY(to.getY());
+        out.setZ(from.getZ() + dz * scale);
+        return out;
     }
 
     private void maybePunish(Player p) {

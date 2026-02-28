@@ -12,5 +12,7 @@ public enum CheckType {
     XRAY,
     NOSLOW,
     VELOCITY,
-    BADPACKETS
+    BADPACKETS,
+    TIMER,
+    INVMOVE
 }

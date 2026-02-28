@@ -11,7 +11,6 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.Deque;
 import java.util.List;
 import java.util.Locale;
@@ -40,6 +39,8 @@ public final class AntiCheatLitePlugin extends JavaPlugin {
     private NoSlowListener noSlowListener;
     private VelocityListener velocityListener;
     private BadPacketsListener badPacketsListener;
+    private TimerListener timerListener;
+    private InvMoveListener invMoveListener;
 
     // Last known "safe" location (usually last on-ground spot). Used for setbacks.
     private final Map<UUID, Location> lastSafe = new ConcurrentHashMap<>();
@@ -146,6 +147,18 @@ public final class AntiCheatLitePlugin extends JavaPlugin {
         }
         badPacketsListener = new BadPacketsListener(this, violationManager, cfg);
         Bukkit.getPluginManager().registerEvents(badPacketsListener, this);
+
+        if (timerListener != null) {
+            org.bukkit.event.HandlerList.unregisterAll(timerListener);
+        }
+        timerListener = new TimerListener(this, violationManager, cfg);
+        Bukkit.getPluginManager().registerEvents(timerListener, this);
+
+        if (invMoveListener != null) {
+            org.bukkit.event.HandlerList.unregisterAll(invMoveListener);
+        }
+        invMoveListener = new InvMoveListener(this, violationManager, cfg);
+        Bukkit.getPluginManager().registerEvents(invMoveListener, this);
     }
 
     /** Update safe location for setbacks. */
@@ -210,7 +223,9 @@ public final class AntiCheatLitePlugin extends JavaPlugin {
                     " xray=" + violationManager.getVl(id, CheckType.XRAY) +
                     " noslow=" + violationManager.getVl(id, CheckType.NOSLOW) +
                     " velocity=" + violationManager.getVl(id, CheckType.VELOCITY) +
-                    " badpackets=" + violationManager.getVl(id, CheckType.BADPACKETS)));
+                    " badpackets=" + violationManager.getVl(id, CheckType.BADPACKETS) +
+                    " timer=" + violationManager.getVl(id, CheckType.TIMER) +
+                    " invmove=" + violationManager.getVl(id, CheckType.INVMOVE)));
             String last = getLastFlagReason(id);
             long at = getLastFlagAt(id);
             if (last != null && at > 0L) {

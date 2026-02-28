@@ -237,10 +237,36 @@ checks:
     eval_delay_ms: 220
     min_samples: 3
     min_expected_horizontal: 0.10
+    min_expected_vertical: 0.08
     # moved / expected ratio below this value is suspicious
     min_take_ratio: 0.20
+    min_take_vertical_ratio: 0.20
     vl_add: 2.0
     cancel_on_flag: false
+
+  timer:
+    enabled: true
+    window_ms: 1500
+    min_samples: 14
+    # If average move dt is consistently lower than this, timer may be active.
+    min_move_dt_ms: 45
+    max_low_dt_ratio: 0.45
+    min_horiz_per_sample: 0.03
+    buffer_min: 2.0
+    buffer_decay: 0.20
+    vl_add: 1.2
+    cancel_on_flag: false
+
+  invmove:
+    enabled: true
+    ignore_after_velocity_ms: 1200
+    min_move_dt_ms: 25
+    max_move_dt_ms: 250
+    min_move_dist: 0.05
+    buffer_min: 2.0
+    buffer_decay: 0.20
+    vl_add: 1.6
+    cancel_on_flag: true
 
   badpackets:
     enabled: true
@@ -276,6 +302,11 @@ movement_sim:
   use_item_mult: 0.35
   violation_add: 1.0
   peak_violation_add: 2.5
+
+  # If player exceeds simulated range, pull them back to simulated position.
+  setback_to_simulated:
+    enabled: true
+    extra_slack_bps: 0.20
 
 
 # Setback tuning ("sticky" teleport) to fight fast fly/blink drift.

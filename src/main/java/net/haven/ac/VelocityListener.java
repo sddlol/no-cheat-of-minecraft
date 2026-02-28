@@ -42,7 +42,9 @@ public final class VelocityListener implements Listener {
     private final long evalDelayMs;
     private final int minSamples;
     private final double minExpectedHorizontal;
+    private final double minExpectedVertical;
     private final double minTakeRatio;
+    private final double minTakeVerticalRatio;
     private final double vlAdd;
     private final boolean cancelOnFlag;
 
@@ -68,7 +70,9 @@ public final class VelocityListener implements Listener {
         this.evalDelayMs = cfg.getLong("checks.velocity.eval_delay_ms", 220L);
         this.minSamples = cfg.getInt("checks.velocity.min_samples", 3);
         this.minExpectedHorizontal = cfg.getDouble("checks.velocity.min_expected_horizontal", 0.10);
+        this.minExpectedVertical = cfg.getDouble("checks.velocity.min_expected_vertical", 0.08);
         this.minTakeRatio = cfg.getDouble("checks.velocity.min_take_ratio", 0.20);
+        this.minTakeVerticalRatio = cfg.getDouble("checks.velocity.min_take_vertical_ratio", 0.20);
         this.vlAdd = cfg.getDouble("checks.velocity.vl_add", 2.0);
         this.cancelOnFlag = cfg.getBoolean("checks.velocity.cancel_on_flag", false);
 
@@ -87,9 +91,12 @@ public final class VelocityListener implements Listener {
         st.hitAt = System.currentTimeMillis();
         st.active = false;
         st.expectedHoriz = 0.0;
+        st.expectedVert = 0.0;
         st.movedHoriz = 0.0;
+        st.maxYGain = 0.0;
         st.samples = 0;
         st.lastLoc = p.getLocation().clone();
+        st.baseY = st.lastLoc.getY();
     }
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
@@ -108,10 +115,13 @@ public final class VelocityListener implements Listener {
         if (expected < minExpectedHorizontal) return;
 
         st.expectedHoriz = expected;
+        st.expectedVert = Math.max(0.0, v.getY());
         st.movedHoriz = 0.0;
+        st.maxYGain = 0.0;
         st.samples = 0;
         st.velocityAt = now;
         st.lastLoc = p.getLocation().clone();
+        st.baseY = st.lastLoc.getY();
         st.active = true;
     }
 
@@ -135,6 +145,7 @@ public final class VelocityListener implements Listener {
         if (st.lastLoc == null || st.lastLoc.getWorld() == null || e.getTo().getWorld() == null
                 || !st.lastLoc.getWorld().equals(e.getTo().getWorld())) {
             st.lastLoc = e.getTo().clone();
+            st.baseY = st.lastLoc.getY();
             return;
         }
 
@@ -143,6 +154,10 @@ public final class VelocityListener implements Listener {
         double horizontal = Math.sqrt(dx * dx + dz * dz);
         st.movedHoriz += horizontal;
         if (horizontal > 0.0001) st.samples++;
+
+        double gain = e.getTo().getY() - st.baseY;
+        if (gain > st.maxYGain) st.maxYGain = gain;
+
         st.lastLoc = e.getTo().clone();
 
         if ((now - st.velocityAt) < evalDelayMs || st.samples < minSamples) return;
@@ -152,13 +167,22 @@ public final class VelocityListener implements Listener {
         if (isInWeirdBlock(p)) return;
 
         double ratio = st.expectedHoriz <= 0.0001 ? 1.0 : (st.movedHoriz / st.expectedHoriz);
-        if (ratio >= minTakeRatio) return;
+        double ratioV = st.expectedVert <= 0.0001 ? 1.0 : (Math.max(0.0, st.maxYGain) / st.expectedVert);
+
+        boolean badH = st.expectedHoriz >= minExpectedHorizontal && ratio < minTakeRatio;
+        boolean badV = st.expectedVert >= minExpectedVertical && ratioV < minTakeVerticalRatio;
+        if (!badH && !badV) return;
 
         double next = vl.addVl(p.getUniqueId(), CheckType.VELOCITY, vlAdd);
         alert(p, "VELOCITY", next,
-                "exp=" + DF2.format(st.expectedHoriz) +
-                        ", moved=" + DF2.format(st.movedHoriz) +
-                        ", ratio=" + DF2.format(ratio));
+                "expH=" + DF2.format(st.expectedHoriz) +
+                        ", gotH=" + DF2.format(st.movedHoriz) +
+                        ", rH=" + DF2.format(ratio) +
+                        ", expV=" + DF2.format(st.expectedVert) +
+                        ", gotV=" + DF2.format(Math.max(0.0, st.maxYGain)) +
+                        ", rV=" + DF2.format(ratioV) +
+                        (badH ? ", noHKB" : "") +
+                        (badV ? ", noVKB" : ""));
 
         if (cancelOnFlag && plugin.canPunish()) {
             e.setTo(e.getFrom());
@@ -230,7 +254,10 @@ public final class VelocityListener implements Listener {
         private long velocityAt = 0L;
         private boolean active = false;
         private double expectedHoriz = 0.0;
+        private double expectedVert = 0.0;
         private double movedHoriz = 0.0;
+        private double baseY = 0.0;
+        private double maxYGain = 0.0;
         private int samples = 0;
         private Location lastLoc;
     }
