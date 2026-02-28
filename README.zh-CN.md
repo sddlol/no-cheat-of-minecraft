@@ -103,6 +103,7 @@
 - `checks.scaffold.prediction.*`
 - `checks.xray.*`
 - `checks.vl_reset_guard.*`
+- `punishments.annoy_mode_threshold_vl`
 - `setback.*`
 
 ---
@@ -124,8 +125,8 @@ target/*.jar
 ## 发布（Tag）
 
 ```bash
-git tag -a v1.8.3 -m "Release v1.8.3"
-git push origin v1.8.3
+git tag -a v1.8.5 -m "Release v1.8.5"
+git push origin v1.8.5
 ```
 
 ---

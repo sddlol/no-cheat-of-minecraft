@@ -247,11 +247,8 @@ this.flyEnabled = cfg.getBoolean("checks.fly.enabled", true);
                     plugin.setback(p);
 
                     double dmg = blinkPunishDamage;
-                    if (dmg > 0.0) {
-                        if (p.getHealth() - dmg <= 0.0) {
-                            DeathMessageListener.markSelfKill(plugin, p);
-                        }
-                        p.damage(dmg, p);
+                    if (dmg > 0.0 && plugin.isAnnoyMode(p)) {
+                        plugin.punishDamage(p, dmg, "BLINK flagged");
                     }
 
                     st.lastLoc = to.clone();

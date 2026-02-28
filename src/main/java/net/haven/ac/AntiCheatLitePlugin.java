@@ -18,6 +18,7 @@ public final class AntiCheatLitePlugin extends JavaPlugin {
 
     private ViolationManager violationManager;
     private boolean chatDebugEnabled;
+    private double annoyModeThresholdVl;
 
     /** Default "annoy" damage (in half-hearts). 2.0 = 1 heart. */
     public static final double DEFAULT_PUNISH_DAMAGE = 2.0;
@@ -62,6 +63,7 @@ public final class AntiCheatLitePlugin extends JavaPlugin {
 
         // Whether to spam debug info to chat by default (can be toggled by command).
         chatDebugEnabled = cfg.getBoolean("debug_chat_default", true);
+        annoyModeThresholdVl = cfg.getDouble("punishments.annoy_mode_threshold_vl", 8.0);
         if (violationManager != null) {
             violationManager.shutdown();
         }
@@ -251,6 +253,17 @@ public final class AntiCheatLitePlugin extends JavaPlugin {
 
     public void setChatDebugEnabled(boolean enabled) {
         this.chatDebugEnabled = enabled;
+    }
+
+    /**
+     * "Annoy mode" is enabled only after total VL reaches threshold.
+     * threshold <= 0 means always enabled.
+     */
+    public boolean isAnnoyMode(Player p) {
+        if (p == null || !p.isOnline()) return false;
+        if (annoyModeThresholdVl <= 0.0) return true;
+        if (violationManager == null) return false;
+        return violationManager.getTotalVl(p.getUniqueId()) >= annoyModeThresholdVl;
     }
 
     public void recordLastFlag(Player p, String check, String details) {

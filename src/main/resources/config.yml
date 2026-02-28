@@ -12,6 +12,11 @@ punishments:
   action: SETBACK
   threshold_vl: 6.0
 
+  # "Annoy mode" starts only after player's TOTAL VL reaches this value.
+  # Affects punish-style actions like annoy damage / scaffold block-break / blink damage.
+  # <= 0 means always annoy (old behavior).
+  annoy_mode_threshold_vl: 8.0
+
   # If true: on ANY flag (any check) we will immediately SETBACK (teleport back)
   # to annoy blatant cheats. This does NOT kick; kick still uses threshold.
   setback_on_flag: true

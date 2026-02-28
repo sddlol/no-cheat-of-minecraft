@@ -204,8 +204,10 @@ public final class ScaffoldListener implements Listener {
             if (impossiblePlacement) details += ", " + impossibleDetails;
             alert(p, "SCAFFOLD", next, details);
 
-            // "Annoy" punishment: break the just-placed block (Grim-style: make the cheat annoying to use).
-            if (scaffoldBreakLastBlock && !e.isCancelled()) {
+            boolean annoyMode = plugin.isAnnoyMode(p);
+
+            // "Annoy" punishment: break the just-placed block (only in annoy mode).
+            if (annoyMode && scaffoldBreakLastBlock && !e.isCancelled()) {
                 final Block b = e.getBlockPlaced();
                 final Material type = b.getType();
                 Bukkit.getScheduler().runTask(plugin, () -> {
@@ -215,8 +217,8 @@ public final class ScaffoldListener implements Listener {
                 });
             }
 
-            // "Annoy" damage: default is 2.0 (=1 heart). If it kills them, death message becomes "被自己杀了".
-            if (scaffoldPunishDamage > 0.0) {
+            // "Annoy" damage (only in annoy mode).
+            if (annoyMode && scaffoldPunishDamage > 0.0) {
                 plugin.punishDamage(p, scaffoldPunishDamage, "SCAFFOLD flagged");
             }
 

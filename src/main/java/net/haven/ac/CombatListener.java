@@ -319,8 +319,8 @@ public final class CombatListener implements Listener {
                     e.setDamage(0.0);
                 }
 
-                // Annoy damage to attacker.
-                if (auraAnnoyDamage > 0.0) {
+                // Annoy damage to attacker (only in annoy mode after enough VL).
+                if (auraAnnoyDamage > 0.0 && plugin.isAnnoyMode(p)) {
                     plugin.punishDamage(p, auraAnnoyDamage, "KILLAURA flagged" + (suspiciousLos ? " (blocked)" : ""));
                 }
             }
